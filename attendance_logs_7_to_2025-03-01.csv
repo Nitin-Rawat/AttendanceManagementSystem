@@ -1,0 +1,10 @@
+EmployeeID,FullName,Position,Department,Date,InTime,OutTime,TotalTime,Status
+EID-02,emp2,Manager,computer-science,2025-03-02,01:42 PM,01:42 PM,,PRESENT
+EID-02,emp2,Manager,computer-science,2025-03-03,09:12 PM,09:14 PM,0.03,PRESENT
+EID-02,emp2,Manager,computer-science,2025-03-09,12:34 PM,12:35 PM,0.02,ON LEAVE
+EID-06,emp6,Operator,electrical,2025-03-01,11:31 PM,11:31 PM,,PRESENT
+EID-07,emp8,Operator,computer-science,2025-03-03,0.00,0.00,,HOLIDAY
+EID-07,emp8,Operator,computer-science,2025-03-05,0.00,0.00,,WEEKEND
+EID-07,emp8,Operator,computer-science,2025-03-06,0.00,0.00,,PRESENT
+EID-07,emp8,Operator,computer-science,2025-03-08,0.00,0.00,,WEEKEND
+EID-07,emp8,Operator,computer-science,2025-03-09,0.00,0.00,,ABSENT
