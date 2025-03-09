@@ -107,7 +107,14 @@ const AttendanceTable = ({
           ))}
         </tbody>
       </table>
-
+      
+      {logs.length === 0 && !isLoading && (
+        <div className="flex justify-center items-center p-8">
+          <div className="bg-gray-100 rounded-lg p-4 text-gray-700">
+            No attendance data found for the selected date.
+          </div>
+        </div>
+      )}
       {hasLogs && (
         <button
           onClick={loadMoreLogs}

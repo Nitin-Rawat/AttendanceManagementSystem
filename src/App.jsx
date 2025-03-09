@@ -7,7 +7,7 @@ import ScanQR from "./components/ScanQR";
 import AttendanceLogs from "./components/AttendanceLogs";
 import EmployeeStats from "./components/EmployeeStats";
 import EmployeeDetails from "./components/EmployeeDetails";
-import LoginPage from "./components/LoginPage"; 
+import LoginPage from "./components/LoginPage";
 import authService from "./Appwrite/auth";
 
 function App() {

@@ -15,6 +15,7 @@ import { databases, storage } from "../Appwrite/appwriteService";
 import { Delete, DeleteIcon, Download, Edit2Icon, Edit3 } from "lucide-react";
 
 // Update Employee Modal Component
+ 
  const UpdateEmployeeModal = ({ employee, onClose, onUpdate }) => {
   const [formData, setFormData] = useState({ ...employee });
   const [isUpdating, setIsUpdating] = useState(false);

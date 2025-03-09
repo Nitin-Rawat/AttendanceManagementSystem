@@ -964,14 +964,77 @@ const AttendanceLogs = () => {
     start: null,
     end: null,
   });
+  const [statusUpdateRun, setStatusUpdateRun] = useState(false);
 
-  // Create a debounced version of loadLogs
-  const debouncedLoadLogs = useCallback(
-    debounce(() => {
-      loadLogs();
-    }, 300),
-    []
-  );
+  // And in the scheduler function
+  const setupStatusUpdateScheduler = () => {
+    // Run status updates at specific intervals
+    const updateInterval = setInterval(() => {
+      // Update all statuses at 6:00 PM (end of typical workday)
+      const currentTime = format(new Date(), "HH:mm");
+      if (currentTime === "18:00" && !statusUpdateRun) {
+        setStatusUpdateRun(true);
+        AttendanceService.updateAllStatuses()
+          .then(() => {
+            // Refresh logs to show updated statuses
+            loadLogs();
+          })
+          .catch((error) => {
+            console.error("Scheduled status update failed:", error);
+          });
+      } else if (currentTime !== "18:00") {
+        setStatusUpdateRun(false); // Reset for the next day
+      }
+    }, 60 * 1000); // Check every minute
+
+    // Clean up interval on component unmount
+    return () => clearInterval(updateInterval);
+  }; 
+
+  // Update the useEffect for attendance checking to use the enhanced version
+  useEffect(() => {
+    if (
+      selectedDate === format(new Date(), "yyyy-MM-dd") &&
+      logs.length > 0 &&
+      !logsProcessedForToday
+    ) {
+      setLogsProcessedForToday(true);
+      AttendanceService.markMissingEmployeesAsAbsent(logs).then(
+        (absentLogs) => {
+          if (absentLogs.length > 0) {
+            setLogs((prevLogs) => {
+              const uniqueLogsMap = new Map();
+
+              prevLogs.forEach((log) => {
+                const key = `${log.EmployeeID}_${log.Date}`;
+                uniqueLogsMap.set(key, log);
+              });
+
+              absentLogs.forEach((log) => {
+                const key = `${log.EmployeeID}_${log.Date}`;
+                if (!uniqueLogsMap.has(key)) {
+                  uniqueLogsMap.set(key, log);
+                }
+              });
+
+              return Array.from(uniqueLogsMap.values());
+            });
+          }
+        }
+      );
+    }
+  }, [selectedDate, logs.length]);
+
+  // Add this to the main component's useEffect initialization
+  useEffect(() => {
+    const cleanupAttendanceCheck = scheduleAttendanceCheck();
+    const cleanupStatusUpdate = setupStatusUpdateScheduler();
+
+    return () => {
+      cleanupAttendanceCheck();
+      cleanupStatusUpdate();
+    };
+  }, []);
 
   // Handler for data changes from EmployeeDateRangeFilter
   const handleEmployeeDataChange = ({ logs, employeeId, dateRange }) => {
@@ -1004,9 +1067,9 @@ const AttendanceLogs = () => {
   };
   // Main function to load attendance logs
   const loadLogs = async () => {
-    if (initialLoadComplete && !selectedDate) {
-      return; // Skip redundant loads
-    }
+    // if (initialLoadComplete && !selectedDate) {
+    //   return; // Skip redundant loads
+    // }
 
     setIsLoading(true);
     try {
@@ -1302,18 +1365,27 @@ const AttendanceLogs = () => {
       return matchesSearch && matchesDate && matchesPosition && matchesStatus;
     });
   };
-
+  // Replace your existing useEffect for selectedDate with this:
   useEffect(() => {
-    // Only load logs when filters change (not when offset changes)
-    if (!logs.length) loadLogs();
-
-    // }, [selectedDate, selectedPosition, selectedStatus, selectedRange]); // Remove offset from dependencies
-  }, [selectedDate, selectedRange]); // Remove offset from dependencies
-  useEffect(() => {
-    if (selectedDate || selectedPosition || selectedStatus) {
-      debouncedLoadLogs();
+    // Clear any previous debouncing
+    if (debouncedLoadLogs.cancel) {
+      debouncedLoadLogs.cancel();
     }
-  }, [selectedDate, selectedPosition, selectedStatus]);
+
+    // Call loadLogs directly when date changes (no debouncing)
+    loadLogs();
+  }, [selectedDate]); // Only selectedDate as dependency
+  // useEffect(() => {
+  //   // Only load logs when filters change (not when offset changes)
+  //   if (!logs.length) loadLogs();
+
+  //   // }, [selectedDate, selectedPosition, selectedStatus, selectedRange]); // Remove offset from dependencies
+  // }, [selectedDate, selectedRange]); // Remove offset from dependencies
+  // useEffect(() => {
+  //   if (selectedDate || selectedPosition || selectedStatus) {
+  //     debouncedLoadLogs();
+  //   }
+  // }, [selectedDate, selectedPosition, selectedStatus]);
 
   useEffect(() => {
     // Only run for today's date and when logs are loaded
@@ -1358,7 +1430,13 @@ const AttendanceLogs = () => {
 
   // Get filtered logs
   const filteredLogs = getFilteredLogs();
-
+  // Create a debounced version of loadLogs
+  const debouncedLoadLogs = useCallback(
+    debounce(() => {
+      loadLogs();
+    }, 300),
+    [loadLogs]
+  );
   // Loading state
   if (isLoading && logs.length === 0) {
     return (
@@ -1392,35 +1470,6 @@ const AttendanceLogs = () => {
         handleExport={handleExport}
         isLoading={isLoading}
       />
-
-      {/* Employee mode indicator */}
-      {employeeSpecificMode && currentEmployeeId && (
-        <div className="bg-blue-50 border border-blue-300 rounded-lg p-4 mb-6 flex justify-between items-center">
-          <div>
-            <span className="font-medium">
-              Viewing data for Employee ID: {currentEmployeeId}
-            </span>
-            <span className="ml-4 text-gray-600">
-              Date Range: {employeeDataDateRange.start} to{" "}
-              {employeeDataDateRange.end}
-            </span>
-          </div>
-          <div>
-            <button
-              onClick={handleExportEmployeeData}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors mr-2"
-            >
-              Export Employee Data
-            </button>
-            <button
-              onClick={handleResetToAllEmployees}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-            >
-              View All Employees
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Search and filters */}
       <AttendanceFilters
