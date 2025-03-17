@@ -9,6 +9,7 @@ const AttendanceTable = ({
   loadMoreLogs,
   hasLogs,
   isLoading,
+  statuses,
 }) => {
   return (
     <div className="overflow-x-auto w-full">
@@ -51,10 +52,10 @@ const AttendanceTable = ({
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="border p-2 rounded-md"
               >
-                <option value="">All Status</option>
-                <option value="Present">Present</option>
-                <option value="Absent">Absent</option>
-                <option value="On Leave">On Leave</option>
+                <option value="">All Status</option> 
+                <option value="PRESENT">PRESENT</option>
+                <option value="ABSENT">ABSENT</option>
+                <option value="ON LEAVE">ON LEAVE</option>
               </select>
             </th>
           </tr>
@@ -107,7 +108,7 @@ const AttendanceTable = ({
           ))}
         </tbody>
       </table>
-      
+
       {logs.length === 0 && !isLoading && (
         <div className="flex justify-center items-center p-8">
           <div className="bg-gray-100 rounded-lg p-4 text-gray-700">
@@ -129,46 +130,66 @@ const AttendanceTable = ({
 };
 
 // Separate component for the status dropdown to further modularize
-const StatusDropdown = ({ status, employeeId, date, onStatusChange }) => {
+const StatusDropdown = ({
+  status,
+  employeeId,
+  date,
+  onStatusChange,
+  statuses,
+}) => {
+  const getStatusColor = (status) => {
+    const normalizedStatus = status?.toUpperCase()?.trim() || "";
+
+    switch (normalizedStatus) {
+      case "PRESENT":
+        return "bg-green-500";
+      case "ABSENT":
+        return "bg-red-500 text-white";
+      case "ON LEAVE":
+        return "bg-blue-500";
+      case "PAID LEAVE":
+        return "bg-sky-400";
+      case "HOLIDAY":
+        return "bg-[#1e4785]";
+      case "OTHER LEAVE":
+        return "bg-yellow-500";
+      case "LATE":
+        return "bg-black";
+      case "WEEKEND":
+        return "bg-gray-500";
+      case "WEEKEND_OT":
+        return "bg-emerald-500 text-white";
+      case "EARLY CHECKOUT":
+        return "bg-emerald-400";
+      case "OVERTIME":
+        return "bg-green-950";
+      case "HALF_DAY":
+        return "bg-amber-300";
+      default:
+        return "bg-yellow-100 text-yellow-800";
+    }
+  };
   return (
     <select
       value={status}
       onChange={(e) => onStatusChange(employeeId, date, e.target.value)}
-      className={`text-sm font-semibold rounded-full text-center text-white py-1 ${
-        status === "PRESENT"
-          ? "bg-green-500 "
-          : status === "ABSENT"
-          ? "bg-red-500 text-white"
-          : status === "ON LEAVE"
-          ? "bg-blue-500 "
-          : status === "PAID LEAVE"
-          ? "bg-sky-400 "
-          : status === "HOLIDAY"
-          ? "bg-[#1e4785] "
-          : status === "OTHER LEAVE"
-          ? "bg-yellow-500 "
-          : status === "LATE"
-          ? "bg-black "
-          : status === "WEEKEND"
-          ? "bg-gray-500 "
-          : status === "EARLY CHECKOUT"
-          ? "bg-emerald-400 "
-          : status === "OVERTIME"
-          ? "bg-green-950  "
-          : "bg-yellow-100 text-yellow-800"
-      }`}
+      className={`text-sm font-semibold rounded-full text-center text-white py-1 ${getStatusColor(
+        status
+      )}`}
     >
       <option value="PRESENT">PRESENT</option>
       <option value="ABSENT">ABSENT</option>
+      <option value="PENDING">PENDING</option>
       <option value="ON LEAVE">ON LEAVE</option>
       <option value="PAID LEAVE">PAID LEAVE</option>
       <option value="HOLIDAY">HOLIDAY</option>
       <option value="OTHER LEAVE">OTHER LEAVE</option>
       <option value="LATE">LATE</option>
       <option value="WEEKEND">WEEKEND</option>
+      <option value="WEEKEND_OT">WEEKEND OT</option>
       <option value="EARLY CHECKOUT">EARLY CHECKOUT</option>
       <option value="OVERTIME">OVERTIME</option>
-      <option value="HALF-DAY">HALF-DAY</option>
+      <option value="HALF_DAY">HALF DAY</option>
     </select>
   );
 };

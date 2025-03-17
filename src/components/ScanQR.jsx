@@ -1,342 +1,16 @@
 // import React, { useState, useEffect, useRef } from "react";
-// import { Camera, User } from "lucide-react";
+// import { Camera, User, RefreshCw } from "lucide-react";
 // import jsQR from "jsqr";
-// import { Databases, Query } from "appwrite";
+// import { Query } from "appwrite";
 // import { databases } from "../Appwrite/appwriteService";
 // import conf from "../conf/conf";
 // import showError from "./Notifications/Error";
-
-// const ScanQR = () => {
-//   const [scanning, setScanning] = useState(false);
-//   const [scannedEmployee, setScannedEmployee] = useState(null);
-//   const [error, setError] = useState(null);
-//   const [isProcessing, setIsProcessing] = useState(false);
-//   const videoRef = useRef(null);
-//   const canvasRef = useRef(null);
-//   const contextRef = useRef(null);
-//   const streamRef = useRef(null);
-//   const scanIntervalRef = useRef(null);
-
-//   useEffect(() => {
-//     if (scanning && videoRef.current) {
-//       const video = videoRef.current;
-//       const constraints = { facingMode: "environment" };
-
-//       navigator.mediaDevices
-//         .getUserMedia({ video: constraints })
-//         .then((stream) => {
-//           streamRef.current = stream;
-//           video.srcObject = stream;
-//           video.play();
-
-//           const canvas = canvasRef.current;
-//           const context = canvas.getContext("2d");
-//           contextRef.current = context;
-
-//           scanIntervalRef.current = setInterval(() => {
-//             if (!scanning) return;
-//             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-//             const imageData = context.getImageData(
-//               0,
-//               0,
-//               canvas.width,
-//               canvas.height
-//             );
-//             handleScan(imageData);
-//           }, 100);
-//         })
-//         .catch((err) => {
-//           showError("Error accessing camera:", err);
-//           setError("Error accessing camera");
-//         });
-
-//       return () => {
-//         if (scanIntervalRef.current) {
-//           clearInterval(scanIntervalRef.current);
-//         }
-//         if (streamRef.current) {
-//           streamRef.current.getTracks().forEach((track) => track.stop());
-//         }
-//       };
-//     }
-//   }, [scanning]);
-
-//   const handleScan = (imageData) => {
-//     if (!canvasRef.current || !videoRef.current) return;
-
-//     const canvas = canvasRef.current;
-//     const video = videoRef.current;
-//     const ctx = canvas.getContext("2d");
-
-//     // Ensure video feed is active
-//     if (video.videoWidth > 0 && video.videoHeight > 0) {
-//       canvas.width = video.videoWidth;
-//       canvas.height = video.videoHeight;
-//       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-//       try {
-//         // Extract QR code data
-//         const code = jsQR(imageData.data, imageData.width, imageData.height);
-//         if (code) {
-
-//           // Avoid processing the same QR code multiple times
-//           if (scannedEmployee && scannedEmployee.EmployeeID === code.data) {
-          
-//             return;
-//           }
-
-//           try {
-//             const employeeData = JSON.parse(code.data); // Ensure it's valid JSON
-//             setScannedEmployee(employeeData);
-//             setScanning(false);
-//             markAttendance(employeeData); // Call attendance marking function
-//           } catch (e) {
-//             showError("Invalid QR Code format:", e);
-//             setError("Invalid QR code format");
-//             setTimeout(() => setError(""), 1000);
-//           }
-//         } else {
-//           console.log("No QR Code detected.");
-//         }
-//       } catch (e) {
-//         showError("Error scanning QR Code:", e);
-//         setError("Failed to scan QR Code");
-//         setTimeout(() => setError(""), 500);
-//       }
-//     }
-//   };
-
-// const formatTime = (date) => {
-//   return date.toLocaleTimeString([], {
-//     hour: "2-digit",
-//     minute: "2-digit",
-//     hour12: true,
-//   });
-// };
-
-// const markAttendance = async (employee) => {
-//   console.log("Marking attendance for:", employee);
-//   setIsProcessing(true);
-
-//   try {
-//     const now = new Date();
-//     const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
-//     const timeNow = formatTime(now); // Format to "1:20 AM/PM"
-
-//     const existingRecords = await databases.listDocuments(
-//       conf.appwriteDatabaseId,
-//       conf.appwriteAttendanceLogsCollectionId,
-//       [
-//         Query.equal("EmployeeID", employee.EmployeeID),
-//         Query.equal("Date", today),
-//       ]
-//     );
-
-//     if (existingRecords.documents.length > 0) {
-//       const lastEntry = existingRecords.documents[0];
-//       console.log("Existing Attendance Record:", lastEntry);
-
-//       if (!lastEntry.OutTime || lastEntry.OutTime === "") {
-//         const totalTime = calculateTotalTime(lastEntry.InTime, timeNow);
-//         console.log("Updating OutTime and TotalTime:", timeNow, totalTime);
-
-//         await databases.updateDocument(
-//           conf.appwriteDatabaseId,
-//           conf.appwriteAttendanceLogsCollectionId,
-//           lastEntry.$id,
-//           {
-//             OutTime: timeNow,
-//             TotalTime: totalTime, // Store in decimal format
-//           }
-//         );
-
-//         alert(`✅ ${employee.FullName} checked out successfully`);
-//       } else {
-//         console.log("⚠️ Already checked out today.");
-//       }
-//     } else {
-//       await databases.createDocument(
-//         conf.appwriteDatabaseId,
-//         conf.appwriteAttendanceLogsCollectionId,
-//         "unique()",
-//         {
-//           EmployeeID: employee.EmployeeID,
-//           FullName: employee.FullName,
-//           Shift: employee.Shift,
-//           Department: employee.Department,
-//           Supervisor: employee.Supervisor,
-//           Position: employee.Position,
-//           InTime: timeNow,
-//           Date: today,
-//           OutTime: "",
-//           TotalTime: 0,
-//           Status: "PRESENT",
-//         }
-//       );
-
-//       alert(`✅ ${employee.FullName} checked in successfully`);
-//     }
-//   } catch (error) {
-//     showError("🚨 Error marking attendance:", error);
-//     setError("Failed to mark attendance. Please try again.");
-//     setTimeout(() => setError(""), 1000);
-//   } finally {
-//     setIsProcessing(false);
-//   }
-// };
-
-
-//   // ✅ **Updated `calculateTotalTime` Function**
-// const calculateTotalTime = (inTime, outTime) => {
-
-//   if (!inTime || !outTime) {
-//     showError("Invalid inTime or outTime");
-//     return "0";
-//   }
-
-//   const parseTime = (timeStr) => {
-//     const [time, modifier] = timeStr.split(" ");
-//     let [hours, minutes] = time.split(":").map(Number);
-
-//     if (modifier === "PM" && hours !== 12) hours += 12;
-//     if (modifier === "AM" && hours === 12) hours = 0;
-
-//     return { hours, minutes };
-//   };
-
-//   const inParsed = parseTime(inTime);
-//   const outParsed = parseTime(outTime);
-
-//   const inMinutes = inParsed.hours * 60 + inParsed.minutes;
-//   const outMinutes = outParsed.hours * 60 + outParsed.minutes;
-
-//   const totalMinutes = outMinutes - inMinutes;
-//   if (totalMinutes < 0) {
-//     showError("Invalid time difference detected!");
-//     return "0";
-//   }
-
-//   // ✅ **Convert to hours with two decimal places**
-//   let totalHours = parseFloat((totalMinutes / 60).toFixed(2));
-
-//   return totalHours; // Stored in decimal format (e.g., "8.25")
-// };
-
-
-//   const startScanning = () => {
-//     setScanning(true);
-//     setScannedEmployee(null);
-//     setError(null);
-//   };
-
-//   const stopScanning = () => {
-//     setScanning(false);
-//     if (streamRef.current) {
-//       streamRef.current.getTracks().forEach((track) => track.stop());
-//     }
-//   };
-
-//   return (
-//     <div className="max-w-2xl mx-auto">
-//       <div className="bg-white rounded-xl shadow-lg p-8">
-//         <h1 className="text-3xl font-bold text-gray-800 mb-6">Scan QR Code</h1>
-
-//         {error && (
-//           <div className="my-4 p-4 bg-red-100 text-red-700 rounded-lg">
-//             {error}
-//           </div>
-//         )}
-
-//         <div className="aspect-video bg-gray-100 rounded-lg mb-6">
-//           {scanning ? (
-//             <>
-//               <video ref={videoRef} width="100%" height="auto" />
-//               <canvas ref={canvasRef} style={{ display: "none" }} />
-//             </>
-//           ) : (
-//             <div className="h-full flex items-center justify-center">
-//               <div className="text-center">
-//                 <Camera className="h-16 w-16 text-[#1e4785] mx-auto mb-4" />
-//                 <p className="text-[#1e4785] font-semibold">
-//                   Camera preview will appear here
-//                 </p>
-//               </div>
-//             </div>
-//           )}
-//         </div>
-
-//         <div className="space-x-4">
-//           {!scanning && !isProcessing && (
-//             <div className="flex gap-4">
-//               <button
-//                 onClick={startScanning}
-//                 className="flex-1 bg-[#1e4785] text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center space-x-2"
-//               >
-//                 <Camera className="h-5 w-5" />
-//                 <span>Start Scanning</span>
-//               </button>
-
-//               <button
-//                 onClick={stopScanning}
-//                 className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
-//               >
-//                 <span>Stop Scanning</span>
-//               </button>
-//             </div>
-//           )}
-//         </div>
-
-//         {scannedEmployee && (
-//           <div className="bg-green-50 border border-green-200 rounded-lg p-6 mt-6">
-//             <div className="flex items-start space-x-4">
-//               <div className="bg-green-100 p-3 rounded-full">
-//                 <User className="h-6 w-6 text-green-600" />
-//               </div>
-//               <div>
-//                 <h3 className="text-lg font-semibold text-gray-800">
-//                   Attendance Marked Successfully
-//                 </h3>
-//                 <div className="mt-2 space-y-1">
-//                   <p className="text-gray-600">
-//                     <span className="font-medium">Name:</span>{" "}
-//                     {scannedEmployee.name}
-//                   </p>
-//                   <p className="text-gray-600">
-//                     <span className="font-medium">Employee ID:</span>{" "}
-//                     {scannedEmployee.EmployeeID}
-//                   </p>
-//                   <p className="text-gray-600">
-//                     <span className="font-medium">Department:</span>{" "}
-//                     {scannedEmployee.department}
-//                   </p>
-//                   <p className="text-gray-600">
-//                     <span className="font-medium">Position:</span>{" "}
-//                     {scannedEmployee.Position}
-//                   </p>
-//                 </div>
-//               </div>
-//             </div>
-//           </div>
-//         )}
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default ScanQR;
-
-
-
-
-
-
-import React, { useState, useEffect, useRef } from "react";
-import { Camera, User, RefreshCw } from "lucide-react";
-import jsQR from "jsqr";
-import { Query } from "appwrite";
-import { databases } from "../Appwrite/appwriteService";
-import conf from "../conf/conf";
+import AttendanceService from './services/attendanceService';
+import { format } from 'date-fns';
 import showError from "./Notifications/Error";
+import { useEffect, useRef, useState } from 'react';
+import { Camera, RefreshCw, User } from 'lucide-react';
+import jsQR from 'jsqr';
 
 const ScanQR = () => {
   const [scanning, setScanning] = useState(false);
@@ -443,167 +117,112 @@ const ScanQR = () => {
     }
   };
 
-  // const handleScan = (imageData) => {
-  //   if (!contextRef.current || !videoRef.current || !canvasRef.current) return;
+  const handleScan = (imageData) => {
+    if (!contextRef.current || !videoRef.current || !canvasRef.current) return;
 
-  //   try {
-  //     // Extract QR code data
-  //     const code = jsQR(
-  //       imageData.data,
-  //       imageData.width,
-  //       imageData.height,
-  //       { inversionAttempts: "dontInvert" } // Optimization for performance
-  //     );
+    try {
+      // Extract QR code data
+      const code = jsQR(
+        imageData.data,
+        imageData.width,
+        imageData.height,
+        { inversionAttempts: "dontInvert" } // Optimization for performance
+      );
 
-  //     if (code) {
-  //       // Debounce scanning - prevent multiple scans of same code
-  //       const now = Date.now();
-  //       if (
-  //         lastScannedRef.current &&
-  //         lastScannedRef.current.code === code.data &&
-  //         now - lastScannedRef.current.time < 2000
-  //       ) {
-  //         return; // Skip if same code scanned within 2 seconds
-  //       }
+      if (code) {
+        // Debounce scanning - prevent multiple scans of same code
+        const now = Date.now();
+        if (
+          lastScannedRef.current &&
+          lastScannedRef.current.code === code.data &&
+          now - lastScannedRef.current.time < 2000
+        ) {
+          return; // Skip if same code scanned within 2 seconds
+        }
 
-  //       lastScannedRef.current = { code: code.data, time: now };
+        lastScannedRef.current = { code: code.data, time: now };
 
-  //       try {
-  //         const employeeData = JSON.parse(code.data);
+        try {
+          // Add logging to debug the QR code content
+          console.log("QR code data:", code.data);
 
-  //         // Validate the scanned data has required fields
-  //         if (!validateQrData(employeeData)) {
-  //           throw new Error("Invalid employee data format");
-  //         }
+          // First check if the data is valid JSON
+          let employeeData;
+          try {
+            employeeData = JSON.parse(code.data);
+          } catch (parseError) {
+            console.error("JSON parse error:", parseError);
+            throw new Error("QR code is not valid JSON format");
+          }
 
-  //         // Stop scanning and mark attendance
-  //         setScannedEmployee(employeeData);
-  //         setScanning(false);
-  //         setScanStatus("success");
-  //         markAttendance(employeeData);
-  //       } catch (e) {
-  //         console.error("QR code parse error:", e);
-  //         setError("Invalid QR code format. Please try again.");
-  //         setScanStatus("error");
-  //         setTimeout(() => setError(null), 3000);
-  //       }
-  //     }
-  //   } catch (e) {
-  //     console.error("QR scan error:", e);
-  //     setError("QR code scanning failed. Please try again.");
-  //     setTimeout(() => setError(null), 3000);
-  //   }
-  // };
-const handleScan = (imageData) => {
-  if (!contextRef.current || !videoRef.current || !canvasRef.current) return;
+          // Log the parsed data for debugging
+          console.log("Parsed employee data:", employeeData);
 
-  try {
-    // Extract QR code data
-    const code = jsQR(
-      imageData.data,
-      imageData.width,
-      imageData.height,
-      { inversionAttempts: "dontInvert" } // Optimization for performance
+          // Validate the scanned data has required fields
+          if (!validateQrData(employeeData)) {
+            console.error("Invalid QR data format:", employeeData);
+            throw new Error("Invalid employee data format");
+          }
+
+          // Stop scanning and mark attendance
+          setScannedEmployee(employeeData);
+          setScanning(false);
+          setScanStatus("success");
+          markAttendance(employeeData);
+        } catch (e) {
+          console.error("QR code parse error:", e);
+          setError(`Invalid QR code format: ${e.message}. Please try again.`);
+          setScanStatus("error");
+          setTimeout(() => setError(null), 5000);
+        }
+      }
+    } catch (e) {
+      console.error("QR scan error:", e);
+      setError("QR code scanning failed. Please try again.");
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  const validateQrData = (data) => {
+    // Check if data is an object
+    if (!data || typeof data !== "object") {
+      console.error("QR data is not an object:", data);
+      return false;
+    }
+
+    // Check required fields exist
+    const requiredFields = ["EmployeeID",
+      "FullName",
+      "Department",
+      "Position",];
+    const missingFields = requiredFields.filter(
+      (field) =>
+        !data.hasOwnProperty(field) ||
+        data[field] === undefined ||
+        data[field] === null
     );
 
-    if (code) {
-      // Debounce scanning - prevent multiple scans of same code
-      const now = Date.now();
-      if (
-        lastScannedRef.current &&
-        lastScannedRef.current.code === code.data &&
-        now - lastScannedRef.current.time < 2000
-      ) {
-        return; // Skip if same code scanned within 2 seconds
-      }
-
-      lastScannedRef.current = { code: code.data, time: now };
-
-      try {
-        // Add logging to debug the QR code content
-        console.log("QR code data:", code.data);
-
-        // First check if the data is valid JSON
-        let employeeData;
-        try {
-          employeeData = JSON.parse(code.data);
-        } catch (parseError) {
-          console.error("JSON parse error:", parseError);
-          throw new Error("QR code is not valid JSON format");
-        }
-
-        // Log the parsed data for debugging
-        console.log("Parsed employee data:", employeeData);
-
-        // Validate the scanned data has required fields
-        if (!validateQrData(employeeData)) {
-          console.error("Invalid QR data format:", employeeData);
-          throw new Error("Invalid employee data format");
-        }
-
-        // Stop scanning and mark attendance
-        setScannedEmployee(employeeData);
-        setScanning(false);
-        setScanStatus("success");
-        markAttendance(employeeData);
-      } catch (e) {
-        console.error("QR code parse error:", e);
-        setError(`Invalid QR code format: ${e.message}. Please try again.`);
-        setScanStatus("error");
-        setTimeout(() => setError(null), 5000);
-      }
+    if (missingFields.length > 0) {
+      console.error("Missing required fields:", missingFields);
+      return false;
     }
-  } catch (e) {
-    console.error("QR scan error:", e);
-    setError("QR code scanning failed. Please try again.");
-    setTimeout(() => setError(null), 3000);
-  }
-};
 
-// Enhance the validation function to provide more detailed errors
-const validateQrData = (data) => {
-  // Check if data is an object
-  if (!data || typeof data !== "object") {
-    console.error("QR data is not an object:", data);
-    return false;
-  }
-
-  // Check required fields exist
-  const requiredFields = ["EmployeeID",
-    "FullName",
-    "Department",
-   "Position",];
-  const missingFields = requiredFields.filter(
-    (field) =>
-      !data.hasOwnProperty(field) ||
-      data[field] === undefined ||
-      data[field] === null
-  );
-
-  if (missingFields.length > 0) {
-    console.error("Missing required fields:", missingFields);
-    return false;
-  }
-
-  return true;
-};
- 
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+    return true;
   };
 
+  // const formatTime = (date) => {
+  //   return date.toLocaleTimeString([], {
+  //     hour: "2-digit",
+  //     minute: "2-digit",
+  //     hour12: true,
+  //   });
+  // };
 
-  const determineStatus = (totalTime) => {
-    if (totalTime >= 8) return "OVERTIME";
-    if (totalTime < 4) return "HALF-DAY";
-    return "PRESENT";
-  };
-
+  // const determineStatus = (totalTime) => {
+  //   if (totalTime >= 8) return "OVERTIME";
+  //   if (totalTime < 4) return "HALF-DAY";
+  //   return "PRESENT";
+  // };
 
   const markAttendance = async (employee) => {
     console.log("Marking attendance for:", employee);
@@ -611,152 +230,92 @@ const validateQrData = (data) => {
 
     try {
       const now = new Date();
-      const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
-      const timeNow = formatTime(now);
+      const timeNow = format(now, 'HH:mm');
 
-      // Map QR code data structure to our database structure
-      const employeeRecord = {
-        EmployeeID: employee.EmployeeID,
-        FullName: employee.FullName,
-        Department: employee.Department,
-        Position: employee.Position,
-        // Use default values if these fields are missing
-        Shift: employee.Shift || "Day",
-        Supervisor: employee.Supervisor || "",
-      };
-
-      const existingRecords = await databases.listDocuments(
-        conf.appwriteDatabaseId,
-        conf.appwriteAttendanceLogsCollectionId,
-        [
-          Query.equal("EmployeeID", employeeRecord.EmployeeID),
-          Query.equal("Date", today),
-        ]
+      // Use AttendanceService to process the scan
+      const result = await AttendanceService.processAttendanceScan(
+        employee.EmployeeID,
+        timeNow
       );
 
-      if (existingRecords.documents.length > 0) {
-        const lastEntry = existingRecords.documents[0];
-
-        if (!lastEntry.OutTime || lastEntry.OutTime === "") {
-          // Calculate hours worked
-          const totalTime = calculateTotalTime(lastEntry.InTime, timeNow);
-
-          await databases.updateDocument(
-            conf.appwriteDatabaseId,
-            conf.appwriteAttendanceLogsCollectionId,
-            lastEntry.$id,
-            {
-              OutTime: timeNow,
-              TotalTime: totalTime,
-              Status:determineStatus(totalTime),
-            }
-          );
-
-          showNotification(
-            `${employeeRecord.FullName} checked out successfully`
-          );
-        } else {
-          showNotification(
-            `${employeeRecord.FullName} has already checked out today`,
-            "warning"
-          );
-        }
-      } else {
-        await databases.createDocument(
-          conf.appwriteDatabaseId,
-          conf.appwriteAttendanceLogsCollectionId,
-          "unique()",
-          {
-            EmployeeID: employee.EmployeeID,
-            FullName: employee.FullName,
-            Shift: employee.Shift,
-            Department: employee.Department,
-            Supervisor: employee.Supervisor,
-            Position: employee.Position,
-            InTime: timeNow,
-            Date: today,
-            OutTime: "",
-            TotalTime: 0,
-            Status: "PRESENT",
-          }
+      if (result) {
+        // Check if this was a check-in or check-out
+        const isCheckIn = !result.OutTime || result.OutTime === '0.00';
+        showNotification(
+          `${employee.FullName} ${isCheckIn ? 'checked in' : 'checked out'} successfully`
         );
-
-        showNotification(`${employeeRecord.FullName} checked in successfully`);
       }
     } catch (error) {
       console.error("Attendance marking error:", error);
-      showError(
-        `Error marking attendance: ${error.message || "Unknown error"}`
-      );
-      setError("Failed to mark attendance. Please try again.");
+      showError(error.message || "Failed to mark attendance");
+      setError(error.message || "Failed to mark attendance");
       setTimeout(() => setError(null), 3000);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Show user-friendly notification
   const showNotification = (message, type = "success") => {
     // You could use a proper notification library here
-    alert(`${type === "success" ? "✅" : "⚠️"} ${message}`);
+    alert(`${type === "success" ? "" : ""} ${message}`);
   };
 
-  const calculateTotalTime = (inTime, outTime) => {
-    if (!inTime || !outTime) {
-      console.error("Invalid inTime or outTime", { inTime, outTime });
-      return 0;
-    }
+  // const calculateTotalTime = (inTime, outTime) => {
+  //   if (!inTime || !outTime) {
+  //     console.error("Invalid inTime or outTime", { inTime, outTime });
+  //     return 0;
+  //   }
 
-    try {
-      const parseTime = (timeStr) => {
-        // Handle various time formats
-        const timeRegex = /(\d{1,2}):(\d{2})\s?(AM|PM)/i;
-        const match = timeStr.match(timeRegex);
+  //   try {
+  //     const parseTime = (timeStr) => {
+  //       // Handle various time formats
+  //       const timeRegex = /(\d{1,2}):(\d{2})\s?(AM|PM)/i;
+  //       const match = timeStr.match(timeRegex);
 
-        if (!match) {
-          throw new Error(`Invalid time format: ${timeStr}`);
-        }
+  //       if (!match) {
+  //         throw new Error(`Invalid time format: ${timeStr}`);
+  //       }
 
-        let [_, hours, minutes, modifier] = match;
-        hours = parseInt(hours, 10);
-        minutes = parseInt(minutes, 10);
-        modifier = modifier.toUpperCase();
+  //       let [_, hours, minutes, modifier] = match;
+  //       hours = parseInt(hours, 10);
+  //       minutes = parseInt(minutes, 10);
+  //       modifier = modifier.toUpperCase();
 
-        if (modifier === "PM" && hours !== 12) hours += 12;
-        if (modifier === "AM" && hours === 12) hours = 0;
+  //       if (modifier === "PM" && hours !== 12) hours += 12;
+  //       if (modifier === "AM" && hours === 12) hours = 0;
 
-        return { hours, minutes };
-      };
+  //       return { hours, minutes };
+  //     };
 
-      const inParsed = parseTime(inTime);
-      const outParsed = parseTime(outTime);
+  //     const inParsed = parseTime(inTime);
+  //     const outParsed = parseTime(outTime);
 
-      // Calculate minutes elapsed
-      let inMinutes = inParsed.hours * 60 + inParsed.minutes;
-      let outMinutes = outParsed.hours * 60 + outParsed.minutes;
+  //     // Calculate minutes elapsed
+  //     let inMinutes = inParsed.hours * 60 + inParsed.minutes;
+  //     let outMinutes = outParsed.hours * 60 + outParsed.minutes;
 
-      // Handle overnight shifts (when outTime is on the next day)
-      if (outMinutes < inMinutes) {
-        outMinutes += 24 * 60; // Add a full day in minutes
-      }
+  //     // Handle overnight shifts (when outTime is on the next day)
+  //     if (outMinutes < inMinutes) {
+  //       outMinutes += 24 * 60; // Add a full day in minutes
+  //     }
 
-      const totalMinutes = outMinutes - inMinutes;
-      if (totalMinutes < 0) {
-        console.error("Invalid time calculation", {
-          inTime,
-          outTime,
-          totalMinutes,
-        });
-        return 0;
-      }
+  //     const totalMinutes = outMinutes - inMinutes;
+  //     if (totalMinutes < 0) {
+  //       console.error("Invalid time calculation", {
+  //         inTime,
+  //         outTime,
+  //         totalMinutes,
+  //       });
+  //       return 0;
+  //     }
 
-      // Convert to hours with two decimal places
-      return parseFloat((totalMinutes / 60).toFixed(2));
-    } catch (error) {
-      console.error("Error calculating total time:", error);
-      return 0;
-    }
-  };
+  //     // Convert to hours with two decimal places
+  //     return parseFloat((totalMinutes / 60).toFixed(2));
+  //   } catch (error) {
+  //     console.error("Error calculating total time:", error);
+  //     return 0;
+  //   }
+  // };
 
   const startScanning = () => {
     setScanning(true);
