@@ -6,28 +6,88 @@ import showError from "../Notifications/Error";
 
 const PAGE_SIZE = 30; // Number of logs per request
 
-// Universal attendance rules
+// Universal attendance rules Original
+// const UNIVERSAL_RULES = {
+//   GRACE_PERIOD: 15, // minutes
+//   MIN_HOURS: {
+//     FULL_DAY: 8,
+//     HALF_DAY: 4
+//   },
+//   OVERTIME_THRESHOLD: 8.25, // hours (8 hours + 10:15 minutes)
+//   WEEKEND_MINIMUM: 1, // minimum hours for weekend overtime
+//   CHECKOUT_BUFFER: 30, // minutes before shift end
+//   MAX_HOURS_BETWEEN_SCANS: 16 // maximum hours between check-in and check-out
+// };
+
 const UNIVERSAL_RULES = {
   GRACE_PERIOD: 15, // minutes
   MIN_HOURS: {
-    FULL_DAY: 8,
-    HALF_DAY: 4
+    FULL_DAY: 0.01, // Reduced to 6 minutes for testing
+    HALF_DAY: 0.005  // Reduced to 3 minutes for testing
   },
-  OVERTIME_THRESHOLD: 8.25, // hours (8 hours + 10:15 minutes)
-  WEEKEND_MINIMUM: 1, // minimum hours for weekend overtime
+  OVERTIME_THRESHOLD: 0.02, // hours (8 hours + 10:15 minutes)
+  WEEKEND_MINIMUM: 0.016, // 1 minute for testing
   CHECKOUT_BUFFER: 30, // minutes before shift end
-  MAX_HOURS_BETWEEN_SCANS: 16 // maximum hours between check-in and check-out
+  MAX_HOURS_BETWEEN_SCANS: 24 // Extended for testing
 };
 
+
 // Enhanced shift configurations with universal rules
+// Original shift configurations (preserved for reference)
+// const SHIFT_CONFIGS = {
+//   MORNING: {
+//     name: 'Morning Shift',
+//     timings: {
+//       start: '09:00',
+//       end: '17:00',
+//       validCheckIn: { start: '08:30', end: '13:00' },
+//       validCheckOut: { start: '16:30', end: '18:00' }
+//     },
+//     breaks: [
+//       { start: '13:00', end: '14:00', type: 'lunch' },
+//       { start: '11:00', end: '11:15', type: 'tea' }
+//     ],
+//     nextDayCheckout: false
+//   },
+//   DAY: {
+//     name: 'Day Shift',
+//     timings: {
+//       start: '13:00',
+//       end: '21:00',
+//       validCheckIn: { start: '12:30', end: '17:00' },
+//       validCheckOut: { start: '20:30', end: '22:00' }
+//     },
+//     breaks: [
+//       { start: '16:00', end: '17:00', type: 'lunch' },
+//       { start: '19:00', end: '19:15', type: 'tea' }
+//     ],
+//     nextDayCheckout: false
+//   },
+//   NIGHT: {
+//     name: 'Night Shift',
+//     timings: {
+//       start: '21:00',
+//       end: '05:00',
+//       validCheckIn: { start: '20:30', end: '00:00' },
+//       validCheckOut: { start: '04:30', end: '06:00' }
+//     },
+//     breaks: [
+//       { start: '01:00', end: '02:00', type: 'dinner' },
+//       { start: '23:00', end: '23:15', type: 'tea' }
+//     ],
+//     nextDayCheckout: true
+//   }
+// };
+
+// ===== TESTING CONFIGURATION (Wider time windows) =====
 const SHIFT_CONFIGS = {
   MORNING: {
     name: 'Morning Shift',
     timings: {
       start: '09:00',
       end: '17:00',
-      validCheckIn: { start: '08:30', end: '13:00' },
-      validCheckOut: { start: '16:30', end: '18:00' }
+      validCheckIn: { start: '00:00', end: '23:59' },  // All day check-in
+      validCheckOut: { start: '00:00', end: '23:59' }  // All day check-out
     },
     breaks: [
       { start: '13:00', end: '14:00', type: 'lunch' },
@@ -40,8 +100,8 @@ const SHIFT_CONFIGS = {
     timings: {
       start: '13:00',
       end: '21:00',
-      validCheckIn: { start: '12:30', end: '17:00' },
-      validCheckOut: { start: '20:30', end: '22:00' }
+      validCheckIn: { start: '00:00', end: '23:59' },  // All day check-in
+      validCheckOut: { start: '00:00', end: '23:59' }  // All day check-out
     },
     breaks: [
       { start: '16:00', end: '17:00', type: 'lunch' },
@@ -54,8 +114,8 @@ const SHIFT_CONFIGS = {
     timings: {
       start: '21:00',
       end: '05:00',
-      validCheckIn: { start: '20:30', end: '00:00' },
-      validCheckOut: { start: '04:30', end: '06:00' }
+      validCheckIn: { start: '00:00', end: '23:59' },  // All day check-in
+      validCheckOut: { start: '00:00', end: '23:59' }  // All day check-out
     },
     breaks: [
       { start: '01:00', end: '02:00', type: 'dinner' },
@@ -293,17 +353,57 @@ const processAttendanceScan = async (employeeId, scanTime) => {
 const cache = {
   employees: null,
   employeesByID: new Map(),
-  logs: new Map(), // Cache for attendance logs
-  statusResults: new Map(), // Cache for status determination results
-  expiryTime: 5 * 60 * 1000, // 5 minutes
-  lastFetch: {
-    employees: 0,
-    logs: new Map(), // Track last fetch time for each date/query
+  attendanceLogs: new Map(), // Cache for attendance logs
+  lastFetch: null,
+  CACHE_DURATION: 5 * 60 * 1000, // 5 minutes cache duration
+
+  // Enhanced getLogs with better caching
+  async getLogs(date, startDate, endDate, offset = 0) {
+    const cacheKey = `${date || 'all'}_${startDate || 'none'}_${endDate || 'none'}_${offset}`;
+    const now = Date.now();
+
+    // Check cache first
+    if (this.attendanceLogs.has(cacheKey)) {
+      const cached = this.attendanceLogs.get(cacheKey);
+      if (now - cached.timestamp < this.CACHE_DURATION) {
+        return cached.data;
+      }
+    }
+
+    // Fetch new data
+    const logs = await fetchAttendanceLogsRaw(date, startDate, endDate, offset);
+    
+    // Cache the result
+    this.attendanceLogs.set(cacheKey, {
+      data: logs,
+      timestamp: now
+    });
+
+    return logs;
+  },
+
+  clearCache(type = "all") {
+    if (type === "all" || type === "employees") {
+      this.employees = null;
+      this.employeesByID.clear();
+    }
+    if (type === "all" || type === "logs") {
+      this.attendanceLogs.clear();
+    }
+  },
+
+  invalidateDate(date) {
+    // Remove specific date from cache
+    for (const [key] of this.attendanceLogs) {
+      if (key.includes(date)) {
+        this.attendanceLogs.delete(key);
+      }
+    }
   },
 
   async getEmployees() {
     const now = Date.now();
-    if (!this.employees || now - this.lastFetch.employees > this.expiryTime) {
+    if (!this.employees || now - this.lastFetch > this.CACHE_DURATION) {
       try {
         const response = await databases.listDocuments(
           conf.appwriteDatabaseId,
@@ -339,7 +439,7 @@ const cache = {
             return [emp.$id, employee];
           })
         );
-        this.lastFetch.employees = now;
+        this.lastFetch = now;
       } catch (error) {
         console.error("Error fetching employees:", error);
         showError("Error fetching employees cache");
@@ -358,67 +458,7 @@ const cache = {
     // Refresh cache if employee not found
     await this.getEmployees();
     return this.employeesByID.get(employeeId);
-  },
-
-  async getLogs(date, startDate, endDate, offset = 0) {
-    const cacheKey = `${date || ""}_${startDate || ""}_${endDate || ""}_${offset}`;
-    const now = Date.now();
-
-    // Always invalidate today's cache to ensure fresh data
-    const today = format(new Date(), 'yyyy-MM-dd');
-    if (date === today || (!date && !startDate && !endDate)) {
-      this.invalidateDate(today);
-    }
-
-    if (!this.logs.has(cacheKey) || now - (this.lastFetch.logs.get(cacheKey) || 0) > this.expiryTime) {
-      const logs = await fetchAttendanceLogsRaw(date, startDate, endDate, offset);
-      
-      // Ensure all logs have the required fields
-      const processedLogs = logs.map(log => ({
-        ...log,
-        EmployeeID: log.EmployeeID || '',
-        FullName: log.FullName || '',
-        Position: log.Position || '',
-        Department: log.Department || '',
-        Shift: log.Shift || 'MORNING',
-        Date: log.Date || '',
-        InTime: log.InTime || '0.00',
-        OutTime: log.OutTime || '0.00',
-        TotalTime: log.TotalTime || 0,
-        Status: log.Status || 'PENDING'
-      }));
-
-      this.logs.set(cacheKey, processedLogs);
-      this.lastFetch.logs.set(cacheKey, now);
-    }
-
-    return this.logs.get(cacheKey);
-  },
-
-  clearCache(type = "all") {
-    if (type === "all" || type === "employees") {
-      this.employees = null;
-      this.employeesByID.clear();
-      this.lastFetch.employees = 0;
-    }
-    if (type === "all" || type === "logs") {
-      this.logs.clear();
-      this.lastFetch.logs.clear();
-    }
-    if (type === "all" || type === "status") {
-      this.statusResults.clear();
-    }
-  },
-
-  invalidateDate(date) {
-    // Remove cache entries for specific date
-    for (const key of this.logs.keys()) {
-      if (key.includes(date)) {
-        this.logs.delete(key);
-        this.lastFetch.logs.delete(key);
-      }
-    }
-  },
+  }
 };
 
 // Raw fetch function - lower level implementation
@@ -432,7 +472,7 @@ const fetchAttendanceLogsRaw = async (
     const queries = [
       Query.limit(PAGE_SIZE),
       Query.offset(offset),
-      Query.orderAsc("EmployeeID"),
+      Query.orderAsc("EmployeeID")
     ];
 
     if (date) {
@@ -452,6 +492,29 @@ const fetchAttendanceLogsRaw = async (
     showError("Error fetching attendance logs!");
     return [];
   }
+};
+
+// Enhanced fetchAttendanceLogs with caching and status updates
+const fetchAttendanceLogs = async (
+  date = null,
+  startDate = null,
+  endDate = null,
+  offset = 0
+) => {
+  // Get logs from cache first
+  const logs = await cache.getLogs(date, startDate, endDate, offset);
+  
+  // Only process today's logs for real-time updates
+  const today = format(new Date(), 'yyyy-MM-dd');
+  if (date === today || (!date && (!startDate || startDate <= today) && (!endDate || endDate >= today))) {
+    const todayLogs = logs.filter(log => log.Date === today);
+    if (todayLogs.length > 0) {
+      // Use throttled update to prevent multiple API calls
+      throttledUpdateAllStatuses();
+    }
+  }
+
+  return logs;
 };
 
 // Optimized markMissingEmployeesAsAbsent with batching
@@ -515,47 +578,28 @@ const markMissingEmployeesAsAbsent = async (currentLogs) => {
   }
 };
 
-// Enhanced fetchAttendanceLogs with immediate status updates
-const fetchAttendanceLogs = async (
-  date = null,
-  startDate = null,
-  endDate = null,
-  offset = 0
-) => {
-  try {
-    // Check cache first
-    const cachedLogs = await cache.getLogs(date, startDate, endDate, offset);
-    if (cachedLogs) return cachedLogs;
+// Batch update multiple employee statuses
+const batchUpdateStatuses = async (updates) => {
+  if (!updates || updates.length === 0) return [];
 
-    // If no cache, fetch raw logs
-    const logs = await fetchAttendanceLogsRaw(date, startDate, endDate, offset);
-    
-    // For today's logs, immediately process absent employees
-    if (date === format(new Date(), 'yyyy-MM-dd') || (!date && !startDate && !endDate)) {
-      const absentLogs = await markMissingEmployeesAsAbsent(logs);
-      return [...logs, ...absentLogs];
-    }
+  const results = [];
+  const affectedDates = new Set();
 
-    return logs;
-  } catch (error) {
-    console.error('Error fetching attendance logs:', error);
-    throw error;
+  for (const update of updates) {
+    const result = await updateEmployeeStatus(
+      update.employeeId,
+      update.date,
+      update.status,
+      true // batch mode = true
+    );
+    results.push(result);
+    affectedDates.add(update.date);
   }
-};
 
-// Fetch attendance logs with caching
-// const fetchAttendanceLogs = async (
-//   date = null,
-//   startDate = null,
-//   endDate = null,
-//   offset = 0
-// ) => {
-//   return cache.getLogs(date, startDate, endDate, offset);
-// };
+  // Invalidate cache for all affected dates at once
+  affectedDates.forEach((date) => cache.invalidateDate(date));
 
-// Fetch employees from cache
-const fetchEmployees = async () => {
-  return cache.getEmployees();
+  return results;
 };
 
 // Optimized update employee status with batch processing capability
@@ -626,30 +670,6 @@ const updateEmployeeStatus = async (
     showError("Failed to update status!");
     return null;
   }
-};
-
-// Batch update multiple employee statuses
-const batchUpdateStatuses = async (updates) => {
-  if (!updates || updates.length === 0) return [];
-
-  const results = [];
-  const affectedDates = new Set();
-
-  for (const update of updates) {
-    const result = await updateEmployeeStatus(
-      update.employeeId,
-      update.date,
-      update.status,
-      true // batch mode = true
-    );
-    results.push(result);
-    affectedDates.add(update.date);
-  }
-
-  // Invalidate cache for all affected dates at once
-  affectedDates.forEach((date) => cache.invalidateDate(date));
-
-  return results;
 };
 
 // Fill missing dates for complete reporting
@@ -927,93 +947,6 @@ const diagnoseScanIssue = (employeeId) => {
   });
 };
 
-// Optimized markMissingEmployeesAsAbsent with batching
-// const markMissingEmployeesAsAbsent = async (currentLogs) => {
-//   const today = format(new Date(), 'yyyy-MM-dd');
-//   const isWeekend = isNonWorkingDay(today);
-  
-//   try {
-//     // First, clean up any duplicate records
-//     const existingLogsMap = new Map();
-//     for (const log of currentLogs) {
-//       const key = log.EmployeeID;
-//       if (!existingLogsMap.has(key) || 
-//           new Date(log.$createdAt) < new Date(existingLogsMap.get(key).$createdAt)) {
-//         existingLogsMap.set(key, log);
-//       }
-//     }
-
-//     // Delete duplicate records
-//     const duplicates = currentLogs.filter(log => {
-//       const storedLog = existingLogsMap.get(log.EmployeeID);
-//       return storedLog.$id !== log.$id;
-//     });
-
-//     await Promise.all(duplicates.map(duplicate => 
-//       databases.deleteDocument(
-//         conf.appwriteDatabaseId,
-//         conf.appwriteAttendanceLogsCollectionId,
-//         duplicate.$id
-//       )
-//     ));
-
-//     // Get all employees
-//     const employees = await cache.getEmployees();
-//     const updates = [];
-
-//     // Update status for all employees
-//     for (const employee of employees) {
-//       const existingLog = existingLogsMap.get(employee.EmployeeID);
-      
-//       if (existingLog) {
-//         // Update existing record with weekend status if needed
-//         if (isWeekend && existingLog.Status !== 'WEEKEND') {
-//           await databases.updateDocument(
-//             conf.appwriteDatabaseId,
-//             conf.appwriteAttendanceLogsCollectionId,
-//             existingLog.$id,
-//             { Status: 'WEEKEND' }
-//           );
-//         }
-//       } else {
-//         // Create new record for missing employee
-//         updates.push({
-//           EmployeeID: employee.EmployeeID,
-//           FullName: employee.FullName || '',
-//           Position: employee.Position || '',
-//           Department: employee.Department || '',
-//           Shift: employee.Shift || 'MORNING',
-//           Date: today,
-//           Status: isWeekend ? 'WEEKEND' : 'PENDING',
-//           InTime: '0.00',
-//           OutTime: '0.00',
-//           TotalTime: 0
-//         });
-//       }
-//     }
-
-//     // Create records for missing employees
-//     if (updates.length > 0) {
-//       const results = await Promise.all(updates.map(update => 
-//         databases.createDocument(
-//           conf.appwriteDatabaseId,
-//           conf.appwriteAttendanceLogsCollectionId,
-//           'unique()',
-//           update
-//         )
-//       ));
-
-//       return results;
-//     }
-
-//     return [];
-//   } catch (error) {
-//     console.error('Error in markMissingEmployeesAsAbsent:', error);
-//     showError('Failed to process absent employees');
-//     return [];
-//   }
-// };
-
 // Update all statuses
 const updateAllStatuses = async () => {
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -1105,91 +1038,26 @@ const debounce = (fn, delay) => {
   };
 };
 
-// const enhancedBatchProcess = async (
-//   items,
-//   processFn,
-//   batchSize = 10,
-//   progressCallback = null
-// ) => {
-//   const totalBatches = Math.ceil(items.length / batchSize);
-//   let completedBatches = 0;
-//   const results = [];
+// Add at the top with other constants
+const isDevelopment = process.env.NODE_ENV === 'development';
+let isTestMode = isDevelopment;
 
-//   const processBatch = async (batch, batchIndex) => {
-//     try {
-//       const batchResults = await processFn(batch);
-//       results.push(...batchResults);
-//     } catch (error) {
-//       console.error(
-//         `Error processing batch ${batchIndex + 1}/${totalBatches}:`,
-//         error
-//       );
-//     }
-//     completedBatches++;
-//     if (progressCallback && typeof progressCallback === "function") {
-//       progressCallback({
-//         completed: completedBatches,
-//         total: totalBatches,
-//         progress: Math.round((completedBatches / totalBatches) * 100),
-//       });
-//     }
-//   };
+// Add these functions before the AttendanceService export
+const enableTestMode = () => {
+  isTestMode = true;
+  console.log('⚠️ Attendance Test Mode Enabled - Time restrictions bypassed');
+};
 
-//   await Promise.all(
-//     Array.from({ length: totalBatches }, (_, i) =>
-//       processBatch(items.slice(i * batchSize, (i + 1) * batchSize), i)
-//     )
-//   );
+const disableTestMode = () => {
+  isTestMode = false;
+  console.log('✅ Attendance Test Mode Disabled - Normal time restrictions active');
+};
 
-//   return results;
-// };
-
-// // Retry function for database operations
-// const withRetry = async (operation, retries = 3, delay = 1000) => {
-//   let lastError;
-  
-//   for (let attempt = 1; attempt <= retries; attempt++) {
-//     try {
-//       return await operation();
-//     } catch (error) {
-//       console.log(`Operation failed (attempt ${attempt}/${retries}):`, error.message);
-//       lastError = error;
-
-//       if (attempt < retries) {
-//         await new Promise(resolve => setTimeout(resolve, delay * attempt));
-//       }
-//     }
-//   }
-  
-//   throw lastError;
-// };
-
-// // Add utility for scheduling regular attendance updates
-// const scheduleAttendanceUpdates = () => {
-//   // Update every 30 minutes
-//   setInterval(() => {
-//     const currentHour = new Date().getHours();
-//     const currentMinute = new Date().getMinutes();
-    
-//     // Only run during work hours (6 AM to 10 PM)
-//     if (currentHour >= 6 && currentHour < 22) {
-//       console.log(`Scheduled attendance update running: ${new Date()}`);
-      
-//       // Mark absent employees
-//       throttledMarkAbsent([]);
-      
-//       // Update statuses of existing logs
-//       throttledUpdateAllStatuses();
-//     }
-//   }, 30 * 60 * 1000); // 30 minutes
-  
-//   console.log("Attendance update scheduler initialized");
-// };
-
-// Update the export object with optimized functions
+// Export object with optimized functions
 const AttendanceService = {
   fetchAttendanceLogs,
-  fetchEmployees,
+  
+  fetchEmployees: cache.getEmployees,
   updateEmployeeStatus,
   batchUpdateStatuses,
   fillMissingDates, // Original implementation
@@ -1208,8 +1076,10 @@ const AttendanceService = {
   debounce,
   createThrottle,
   diagnoseScanIssue,
+  enableTestMode,
+  disableTestMode,
 
- 
+  // Clear cache and invalidate dates
   clearCache: (type) => cache.clearCache(type),
   invalidateDate: (date) => cache.invalidateDate(date),
 };
