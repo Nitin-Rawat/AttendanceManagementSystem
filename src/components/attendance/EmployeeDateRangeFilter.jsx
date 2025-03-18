@@ -185,7 +185,7 @@ const EmployeeDateRangeFilter = ({
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-black h-5 w-5" />
               <input
                 type="text"
-                placeholder="Employee ID"
+                placeholder="Full Employee ID"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
