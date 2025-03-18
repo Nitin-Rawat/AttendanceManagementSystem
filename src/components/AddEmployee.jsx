@@ -459,6 +459,7 @@ const AddEmployee = () => {
               onChange={(e) =>
                 setFormData({ ...formData, HireDate: e.target.value })
               }
+              max={new Date().toISOString().split('T')[0]}
               className={`w-full px-4 py-2 border rounded-lg text-black
                 ${
                   validationErrors.HireDate
