@@ -4,7 +4,7 @@ import { Query } from "appwrite";
 import { format, subMonths } from "date-fns";
 import showError from "../Notifications/Error";
 
-const PAGE_SIZE = 30; // Number of logs per request
+const PAGE_SIZE = 20; // Number of logs per request
 
 // Universal attendance rules Original
 // const UNIVERSAL_RULES = {
@@ -353,11 +353,10 @@ const processAttendanceScan = async (employeeId, scanTime) => {
 const cache = {
   employees: null,
   employeesByID: new Map(),
-  attendanceLogs: new Map(), // Cache for attendance logs
+  attendanceLogs: new Map(),
   lastFetch: null,
-  CACHE_DURATION: 5 * 60 * 1000, // 5 minutes cache duration
+  CACHE_DURATION: 1 * 60 * 1000, // Reduced to 1 minute for testing
 
-  // Enhanced getLogs with better caching
   async getLogs(date, startDate, endDate, offset = 0) {
     const cacheKey = `${date || 'all'}_${startDate || 'none'}_${endDate || 'none'}_${offset}`;
     const now = Date.now();
@@ -366,12 +365,16 @@ const cache = {
     if (this.attendanceLogs.has(cacheKey)) {
       const cached = this.attendanceLogs.get(cacheKey);
       if (now - cached.timestamp < this.CACHE_DURATION) {
+        console.log('🔵 Using cached data for:', cacheKey);
         return cached.data;
       }
+      console.log('🔄 Cache expired for:', cacheKey);
     }
 
-    // Fetch new data
+    // Fetch new data from Appwrite
+    console.log('📡 Fetching fresh data from Appwrite for:', cacheKey);
     const logs = await fetchAttendanceLogsRaw(date, startDate, endDate, offset);
+    console.log(`✅ Fetched ${logs.length} records from Appwrite`);
     
     // Cache the result
     this.attendanceLogs.set(cacheKey, {
@@ -383,6 +386,7 @@ const cache = {
   },
 
   clearCache(type = "all") {
+    console.log('🧹 Clearing cache:', type);
     if (type === "all" || type === "employees") {
       this.employees = null;
       this.employeesByID.clear();
@@ -393,7 +397,7 @@ const cache = {
   },
 
   invalidateDate(date) {
-    // Remove specific date from cache
+    console.log('🔄 Invalidating cache for date:', date);
     for (const [key] of this.attendanceLogs) {
       if (key.includes(date)) {
         this.attendanceLogs.delete(key);
@@ -415,35 +419,16 @@ const cache = {
           return [];
         }
 
-        console.log('Fetched employees:', response.documents.length);
         this.employees = response.documents;
         
-        // Update the employee map with all required fields
+        // Update the employee map
         this.employeesByID = new Map(
-          this.employees.map(emp => {
-            // Ensure all required fields are present with proper defaults
-            const employee = {
-              ...emp,
-              EmployeeID: emp.EmployeeID || '',
-              FullName: emp.FullName || '',
-              Position: emp.Position || '',
-              Department: emp.Department || '',
-              Supervisor: emp.Supervisor || '',
-              Shift: emp.Shift || 'MORNING',
-              MobileNo: emp.MobileNo || '',
-              Email: emp.Email || '',
-              HireDate: emp.HireDate || '',
-              Image: emp.Image || '',
-              QR: emp.QR || ''
-            };
-            return [emp.$id, employee];
-          })
+          this.employees.map(emp => [emp.$id, emp])
         );
         this.lastFetch = now;
       } catch (error) {
         console.error("Error fetching employees:", error);
         showError("Error fetching employees cache");
-        // Keep old data on error
         if (!this.employees) this.employees = [];
       }
     }
@@ -469,10 +454,11 @@ const fetchAttendanceLogsRaw = async (
   offset = 0
 ) => {
   try {
+    console.log('📝 Fetching logs with params:', { date, startDate, endDate, offset });
+    
     const queries = [
       Query.limit(PAGE_SIZE),
-      Query.offset(offset),
-      Query.orderAsc("EmployeeID")
+      Query.offset(offset)
     ];
 
     if (date) {
@@ -481,14 +467,48 @@ const fetchAttendanceLogsRaw = async (
       queries.push(Query.between("Date", startDate, endDate));
     }
 
-    const response = await databases.listDocuments(
-      conf.appwriteDatabaseId,
-      conf.appwriteAttendanceLogsCollectionId,
-      queries
-    );
+    let allDocuments = [];
+    let currentOffset = offset;
+    let hasMore = true;
 
-    return response.documents || [];
+    while (hasMore) {
+      console.log(`📥 Fetching batch at offset ${currentOffset}`);
+      queries[1] = Query.offset(currentOffset);
+
+      const response = await databases.listDocuments(
+        conf.appwriteDatabaseId,
+        conf.appwriteAttendanceLogsCollectionId,
+        queries
+      );
+
+      if (!response.documents || response.documents.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      allDocuments = [...allDocuments, ...response.documents];
+      console.log(`📦 Batch received: ${response.documents.length} documents`);
+
+      if (response.documents.length < 100) {
+        hasMore = false;
+      } else {
+        currentOffset += 100;
+      }
+    }
+
+    if (allDocuments.length === 0) {
+      console.log("❌ No documents found");
+      return [];
+    }
+
+    // Log the actual employee IDs we got
+    const employeeIds = [...new Set(allDocuments.map(doc => doc.EmployeeID))];
+    console.log('📋 Found records for employees:', employeeIds);
+    
+    console.log(`✅ Found total ${allDocuments.length} documents`);
+    return allDocuments;
   } catch (error) {
+    console.error("❌ Error in fetchAttendanceLogsRaw:", error);
     showError("Error fetching attendance logs!");
     return [];
   }
@@ -501,20 +521,41 @@ const fetchAttendanceLogs = async (
   endDate = null,
   offset = 0
 ) => {
-  // Get logs from cache first
-  const logs = await cache.getLogs(date, startDate, endDate, offset);
-  
-  // Only process today's logs for real-time updates
-  const today = format(new Date(), 'yyyy-MM-dd');
-  if (date === today || (!date && (!startDate || startDate <= today) && (!endDate || endDate >= today))) {
-    const todayLogs = logs.filter(log => log.Date === today);
-    if (todayLogs.length > 0) {
-      // Use throttled update to prevent multiple API calls
-      throttledUpdateAllStatuses();
+  try {
+    console.log('🔍 Fetching attendance logs:', { date, startDate, endDate });
+    
+    // Clear cache before fetching to ensure fresh data
+    cache.clearCache("logs");
+    
+    // Get logs from Appwrite
+    const logs = await cache.getLogs(date, startDate, endDate, offset);
+    
+    // Only process today's logs for real-time updates
+    const today = format(new Date(), 'yyyy-MM-dd');
+    if (date === today || (!date && (!startDate || startDate <= today) && (!endDate || endDate >= today))) {
+      const todayLogs = logs.filter(log => log.Date === today);
+      if (todayLogs.length > 0) {
+        throttledUpdateAllStatuses();
+      }
     }
-  }
 
-  return logs;
+    // Ensure all required fields are present
+    const processedLogs = logs.map(log => ({
+      ...log,
+      EmployeeID: log.EmployeeID || '',
+      Date: log.Date || '',
+      InTime: log.InTime || '0.00',
+      OutTime: log.OutTime || '0.00',
+      TotalTime: log.TotalTime || 0,
+      Status: log.Status || 'ABSENT'
+    }));
+
+    console.log(`✨ Returning ${processedLogs.length} processed logs`);
+    return processedLogs;
+  } catch (error) {
+    console.error("❌ Error in fetchAttendanceLogs:", error);
+    return [];
+  }
 };
 
 // Optimized markMissingEmployeesAsAbsent with batching
