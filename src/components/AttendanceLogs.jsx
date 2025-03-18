@@ -536,6 +536,7 @@ const AttendanceLogs = () => {
         isEmployeeSpecificMode={employeeSpecificMode}
         currentEmployeeId={currentEmployeeId}
         employeeDataDateRange={employeeDataDateRange}
+        logs={logs} // Pass the logs to the component
       />
       {/* Header with date range and export */}
       <AttendanceHeader

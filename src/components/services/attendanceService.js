@@ -472,7 +472,9 @@ const fetchAttendanceLogsRaw = async (
     let hasMore = true;
 
     while (hasMore) {
-      console.log(`📥 Fetching batch at offset ${currentOffset}`);
+      console.log(`📥 Fetching batch at offset ${currentOffset}...`);
+      
+      // Update offset in queries
       queries[1] = Query.offset(currentOffset);
 
       const response = await databases.listDocuments(
@@ -482,27 +484,31 @@ const fetchAttendanceLogsRaw = async (
       );
 
       if (!response.documents || response.documents.length === 0) {
+        console.log('📭 No more documents found');
         hasMore = false;
         break;
       }
 
       allDocuments = [...allDocuments, ...response.documents];
-      console.log(`📦 Batch received: ${response.documents.length} documents`);
+      console.log(`📦 Batch received: ${response.documents.length} documents (Total: ${allDocuments.length})`);
 
-      if (response.documents.length < 100) {
+      // Check if we received less than PAGE_SIZE documents
+      if (response.documents.length < PAGE_SIZE) {
+        console.log('📬 Last batch received (less than PAGE_SIZE)');
         hasMore = false;
       } else {
-        currentOffset += 100;
+        currentOffset += PAGE_SIZE;
+        console.log(`⏭️ Moving to next batch at offset ${currentOffset}`);
       }
     }
 
     if (allDocuments.length === 0) {
-      console.log("❌ No documents found");
+      console.log("❌ No documents found in any batch");
       return [];
     }
 
     // Log the actual employee IDs we got
-    const employeeIds = [...new Set(allDocuments.map(doc => doc.EmployeeID))];
+    const employeeIds = [...new Set(allDocuments.map(doc => doc.EmployeeID))].sort();
     console.log('📋 Found records for employees:', employeeIds);
     
     console.log(`✅ Found total ${allDocuments.length} documents`);

@@ -15,6 +15,7 @@ const EmployeeDateRangeFilter = ({
   isEmployeeSpecificMode = false,
   currentEmployeeId = null,
   employeeDataDateRange = { start: null, end: null },
+  logs = [], // Add logs as a prop
 }) => {
   const [employeeId, setEmployeeId] = useState("");
   const [startDate, setStartDate] = useState(
@@ -41,7 +42,8 @@ const EmployeeDateRangeFilter = ({
     setErrorMessage("");
     setIsLoading(true);
     try {
-      console.log('🔍 Searching for employee:', employeeId.toUpperCase());
+      const searchEmployeeId = employeeId.trim().toUpperCase();
+      console.log('🔍 Searching for employee:', searchEmployeeId);
       
       // Clear cache first to ensure fresh data
       AttendanceService.clearCache("logs");
@@ -55,25 +57,45 @@ const EmployeeDateRangeFilter = ({
 
       console.log(`📊 Found ${allLogs.length} total logs`);
 
-      // Use exact match for employee ID
+      // Log unique employee IDs found
+      const uniqueIds = [...new Set(allLogs.map(log => log.EmployeeID))].sort();
+      console.log('📋 Available employee IDs:', uniqueIds);
+
+      // Use exact match for employee ID with proper validation
       const employeeLogs = allLogs.filter((log) => {
-        const matches = log.EmployeeID === employeeId.toUpperCase();
+        if (!log.EmployeeID) {
+          console.log('⚠️ Log missing EmployeeID:', log);
+          return false;
+        }
+        
+        const logEmployeeId = log.EmployeeID.trim().toUpperCase();
+        const matches = logEmployeeId === searchEmployeeId;
+        
         if (matches) {
-          console.log('✅ Found matching log:', log);
+          console.log('✅ Found matching log:', {
+            EmployeeID: log.EmployeeID,
+            Date: log.Date,
+            InTime: log.InTime,
+            OutTime: log.OutTime
+          });
         }
         return matches;
       });
 
-      console.log(`🎯 Found ${employeeLogs.length} logs for employee ${employeeId}`);
+      console.log(`🎯 Found ${employeeLogs.length} logs for employee ${searchEmployeeId}`);
 
       // Check if there's any data before proceeding
       if (!employeeLogs || employeeLogs.length === 0) {
-        const error = `No records found for employee ${employeeId} in the selected date range.`;
+        const error = `No records found for employee ${searchEmployeeId} in the selected date range.`;
         console.log('❌', error);
+        console.log('💡 Try one of these employee IDs:', uniqueIds.join(', '));
         setErrorMessage(error);
         setIsLoading(false);
         return;
       }
+
+      // Sort logs by date
+      employeeLogs.sort((a, b) => new Date(a.Date) - new Date(b.Date));
 
       // Fill in any missing dates for the employee
       const completeLogs = AttendanceService.fillMissingDates(
@@ -87,7 +109,7 @@ const EmployeeDateRangeFilter = ({
       // Notify parent component about the data and mode change
       onDataChange({
         logs: completeLogs,
-        employeeId: employeeId,
+        employeeId: searchEmployeeId,
         dateRange: { start: startDate, end: endDate },
       });
 
@@ -123,57 +145,15 @@ const EmployeeDateRangeFilter = ({
 
     setIsLoading(true);
     try {
-      console.log('📊 Exporting data for employee:', currentEmployeeId);
-      
-      // Clear cache first to ensure fresh data
-      AttendanceService.clearCache("logs");
-      
-      // Get all logs for the date range
-      const allLogs = await AttendanceService.fetchAttendanceLogs(
-        null,
+      // Use the data we already have from the parent component
+      // instead of fetching it again
+      const completeLogs = await AttendanceService.exportLogsToCSV(
+        logs, // Use existing logs passed from parent
         employeeDataDateRange.start,
         employeeDataDateRange.end
       );
 
-      console.log(`📊 Found ${allLogs.length} total logs`);
-
-      // Use exact match for employee ID
-      const employeeLogs = allLogs.filter((log) => {
-        const matches = log.EmployeeID === currentEmployeeId.toUpperCase();
-        if (matches) {
-          console.log('✅ Found matching log:', log);
-        }
-        return matches;
-      });
-
-      console.log(`🎯 Found ${employeeLogs.length} logs for employee ${currentEmployeeId}`);
-
-      // Check if there's at least some data
-      if (!employeeLogs || employeeLogs.length === 0) {
-        const error = "No records found for this employee in the selected date range.";
-        console.log('❌', error);
-        setErrorMessage(error);
-        setIsLoading(false);
-        return;
-      }
-
-      // Fill in missing dates
-      const completeLogs = AttendanceService.fillMissingDates(
-        employeeLogs,
-        employeeDataDateRange.start,
-        employeeDataDateRange.end
-      );
-
-      console.log(`✨ Processing ${completeLogs.length} complete logs for export`);
-
-      // Export the data to CSV
-      const exported = AttendanceService.exportLogsToCSV(
-        completeLogs,
-        employeeDataDateRange.start,
-        employeeDataDateRange.end
-      );
-
-      if (!exported) {
+      if (!completeLogs) {
         setErrorMessage("No data to export");
       } else {
         console.log('✅ Data exported successfully');
