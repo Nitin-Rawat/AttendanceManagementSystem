@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import AttendanceHeader from "./attendance/AttendanceHeader";
 import AttendanceFilters from "./attendance/AttendanceFilters";
-import AttendanceTable from "./attendance/AttendanceTable"; 
+import AttendanceTable from "./attendance/AttendanceTable";
 import showError from "./Notifications/Error";
 import { format, subMonths } from "date-fns";
-import AttendanceService from './services/attendanceService';
- 
-import { debounce } from 'lodash';
+import AttendanceService from "./services/attendanceService";
+
+import { debounce } from "lodash";
 import EmployeeDateRangeFilter from "./attendance/EmployeeDateRangeFilter";
 
 const AttendanceLogs = () => {
@@ -60,7 +60,7 @@ const AttendanceLogs = () => {
 
     // Clean up interval on component unmount
     return () => clearInterval(updateInterval);
-  }; 
+  };
 
   // Update the useEffect for attendance checking to use the enhanced version
   useEffect(() => {

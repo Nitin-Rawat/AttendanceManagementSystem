@@ -43,11 +43,11 @@ const EmployeeDateRangeFilter = ({
     setIsLoading(true);
     try {
       const searchEmployeeId = employeeId.trim().toUpperCase();
-      console.log('🔍 Searching for employee:', searchEmployeeId);
-      
+      console.log("🔍 Searching for employee:", searchEmployeeId);
+
       // Clear cache first to ensure fresh data
       AttendanceService.clearCache("logs");
-      
+
       // Fetch all logs for the date range
       const allLogs = await AttendanceService.fetchAttendanceLogs(
         null, // No specific date
@@ -58,37 +58,41 @@ const EmployeeDateRangeFilter = ({
       console.log(`📊 Found ${allLogs.length} total logs`);
 
       // Log unique employee IDs found
-      const uniqueIds = [...new Set(allLogs.map(log => log.EmployeeID))].sort();
-      console.log('📋 Available employee IDs:', uniqueIds);
+      const uniqueIds = [
+        ...new Set(allLogs.map((log) => log.EmployeeID)),
+      ].sort();
+      console.log("📋 Available employee IDs:", uniqueIds);
 
       // Use exact match for employee ID with proper validation
       const employeeLogs = allLogs.filter((log) => {
         if (!log.EmployeeID) {
-          console.log('⚠️ Log missing EmployeeID:', log);
+          console.log("⚠️ Log missing EmployeeID:", log);
           return false;
         }
-        
+
         const logEmployeeId = log.EmployeeID.trim().toUpperCase();
         const matches = logEmployeeId === searchEmployeeId;
-        
+
         if (matches) {
-          console.log('✅ Found matching log:', {
+          console.log("✅ Found matching log:", {
             EmployeeID: log.EmployeeID,
             Date: log.Date,
             InTime: log.InTime,
-            OutTime: log.OutTime
+            OutTime: log.OutTime,
           });
         }
         return matches;
       });
 
-      console.log(`🎯 Found ${employeeLogs.length} logs for employee ${searchEmployeeId}`);
+      console.log(
+        `🎯 Found ${employeeLogs.length} logs for employee ${searchEmployeeId}`
+      );
 
       // Check if there's any data before proceeding
       if (!employeeLogs || employeeLogs.length === 0) {
         const error = `No records found for employee ${searchEmployeeId} in the selected date range.`;
-        console.log('❌', error);
-        console.log('💡 Try one of these employee IDs:', uniqueIds.join(', '));
+        console.log("❌", error);
+        console.log("💡 Try one of these employee IDs:", uniqueIds.join(", "));
         setErrorMessage(error);
         setIsLoading(false);
         return;
@@ -145,18 +149,21 @@ const EmployeeDateRangeFilter = ({
 
     setIsLoading(true);
     try {
-      // Use the data we already have from the parent component
-      // instead of fetching it again
+      // Pass the currentEmployeeId as the fourth parameter
       const completeLogs = await AttendanceService.exportLogsToCSV(
-        logs, // Use existing logs passed from parent
+        logs,
         employeeDataDateRange.start,
-        employeeDataDateRange.end
+        employeeDataDateRange.end,
+        currentEmployeeId // Add this parameter
       );
 
       if (!completeLogs) {
         setErrorMessage("No data to export");
       } else {
-        console.log('✅ Data exported successfully');
+        console.log(
+          "✅ Data exported successfully for employee:",
+          currentEmployeeId
+        );
       }
     } catch (error) {
       console.error("❌ Error exporting employee data:", error);

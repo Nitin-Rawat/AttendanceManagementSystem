@@ -11,6 +11,15 @@ const AttendanceTable = ({
   isLoading,
   statuses,
 }) => {
+  // In your React component that displays the time:
+  const formatTimeDisplay = (decimalHours) => {
+    if (!decimalHours && decimalHours !== 0) return "-";
+
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours}:${minutes.toString().padStart(2, "0")}`;
+  };
+
   return (
     <div className="overflow-x-auto w-full">
       <table className="min-w-full divide-y divide-gray-200">
@@ -52,7 +61,7 @@ const AttendanceTable = ({
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="border p-2 rounded-md"
               >
-                <option value="">All Status</option> 
+                <option value="">All Status</option>
                 <option value="PRESENT">PRESENT</option>
                 <option value="ABSENT">ABSENT</option>
                 <option value="ON LEAVE">ON LEAVE</option>
@@ -94,7 +103,8 @@ const AttendanceTable = ({
                 {log.OutTime || "N/A"}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
-                {log.TotalTime}
+                {/* {log.TotalTime} */}
+                {formatTimeDisplay(log.TotalTime)}
               </td>
               <td className="px-2 py-2 my-2 whitespace-nowrap">
                 <StatusDropdown

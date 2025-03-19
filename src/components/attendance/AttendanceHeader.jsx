@@ -34,9 +34,14 @@ const AttendanceHeader = ({
           onClick={handleExport}
           className="bg-[#2f5fa6] text-white px-4 py-2 rounded-lg hover:bg-[#1e4785] transition-colors flex items-center space-x-2"
           disabled={isLoading}
-        >
+        > {isLoading ? (
+                "Loading..."
+              ) : (
+                <> 
           <Download className="h-5 w-5" />
           <span>Export {selectedRange} Data</span>
+         </>
+          )}
         </button>
       </div>
     </div>

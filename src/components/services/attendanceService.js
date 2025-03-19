@@ -4,7 +4,7 @@ import { Query } from "appwrite";
 import { format, subMonths } from "date-fns";
 import showError from "../Notifications/Error";
 
-const PAGE_SIZE = 20; // Number of logs per request
+const PAGE_SIZE = 50; // Number of logs per request
 
 // Universal attendance rules Original
 // const UNIVERSAL_RULES = {
@@ -23,14 +23,13 @@ const UNIVERSAL_RULES = {
   GRACE_PERIOD: 15, // minutes
   MIN_HOURS: {
     FULL_DAY: 0.01, // Reduced to 6 minutes for testing
-    HALF_DAY: 0.005  // Reduced to 3 minutes for testing
+    HALF_DAY: 0.005, // Reduced to 3 minutes for testing
   },
   OVERTIME_THRESHOLD: 0.02, // hours (8 hours + 10:15 minutes)
   WEEKEND_MINIMUM: 0.016, // 1 minute for testing
   CHECKOUT_BUFFER: 30, // minutes before shift end
-  MAX_HOURS_BETWEEN_SCANS: 24 // Extended for testing
+  MAX_HOURS_BETWEEN_SCANS: 24, // Extended for testing
 };
-
 
 // Enhanced shift configurations with universal rules
 // Original shift configurations (preserved for reference)
@@ -82,60 +81,60 @@ const UNIVERSAL_RULES = {
 // ===== TESTING CONFIGURATION (Wider time windows) =====
 const SHIFT_CONFIGS = {
   MORNING: {
-    name: 'Morning Shift',
+    name: "Morning Shift",
     timings: {
-      start: '09:00',
-      end: '17:00',
-      validCheckIn: { start: '00:00', end: '23:59' },  // All day check-in
-      validCheckOut: { start: '00:00', end: '23:59' }  // All day check-out
+      start: "09:00",
+      end: "17:00",
+      validCheckIn: { start: "00:00", end: "23:59" }, // All day check-in
+      validCheckOut: { start: "00:00", end: "23:59" }, // All day check-out
     },
     breaks: [
-      { start: '13:00', end: '14:00', type: 'lunch' },
-      { start: '11:00', end: '11:15', type: 'tea' }
+      { start: "13:00", end: "14:00", type: "lunch" },
+      { start: "11:00", end: "11:15", type: "tea" },
     ],
-    nextDayCheckout: false
+    nextDayCheckout: false,
   },
   DAY: {
-    name: 'Day Shift',
+    name: "Day Shift",
     timings: {
-      start: '13:00',
-      end: '21:00',
-      validCheckIn: { start: '00:00', end: '23:59' },  // All day check-in
-      validCheckOut: { start: '00:00', end: '23:59' }  // All day check-out
+      start: "13:00",
+      end: "21:00",
+      validCheckIn: { start: "00:00", end: "23:59" }, // All day check-in
+      validCheckOut: { start: "00:00", end: "23:59" }, // All day check-out
     },
     breaks: [
-      { start: '16:00', end: '17:00', type: 'lunch' },
-      { start: '19:00', end: '19:15', type: 'tea' }
+      { start: "16:00", end: "17:00", type: "lunch" },
+      { start: "19:00", end: "19:15", type: "tea" },
     ],
-    nextDayCheckout: false
+    nextDayCheckout: false,
   },
   NIGHT: {
-    name: 'Night Shift',
+    name: "Night Shift",
     timings: {
-      start: '21:00',
-      end: '05:00',
-      validCheckIn: { start: '00:00', end: '23:59' },  // All day check-in
-      validCheckOut: { start: '00:00', end: '23:59' }  // All day check-out
+      start: "21:00",
+      end: "05:00",
+      validCheckIn: { start: "00:00", end: "23:59" }, // All day check-in
+      validCheckOut: { start: "00:00", end: "23:59" }, // All day check-out
     },
     breaks: [
-      { start: '01:00', end: '02:00', type: 'dinner' },
-      { start: '23:00', end: '23:15', type: 'tea' }
+      { start: "01:00", end: "02:00", type: "dinner" },
+      { start: "23:00", end: "23:15", type: "tea" },
     ],
-    nextDayCheckout: true
-  }
+    nextDayCheckout: true,
+  },
 };
 
 // Enhanced time utilities
 const TimeUtils = {
   toMinutes(timeStr) {
-    const [hours, minutes] = timeStr.split(':').map(Number);
+    const [hours, minutes] = timeStr.split(":").map(Number);
     return hours * 60 + minutes;
   },
 
   fromMinutes(minutes) {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
   },
 
   isTimeBetween(time, start, end, isOvernight) {
@@ -160,40 +159,46 @@ const TimeUtils = {
     }
 
     return endMin - startMin;
-  }
+  },
 };
 
 // Enhanced attendance validation
 const validateAttendance = async (scanTime, employee, existingScans = []) => {
-  const shift = SHIFT_CONFIGS[employee.Shift || 'MORNING'];
-  const today = format(new Date(), 'yyyy-MM-dd');
-  
+  const shift = SHIFT_CONFIGS[employee.Shift || "MORNING"];
+  const today = format(new Date(), "yyyy-MM-dd");
+
   // First check if it's a weekend
   const isWeekend = isNonWorkingDay(today);
 
   // Check for duplicate records and clean them up
   if (existingScans.length > 1) {
     // Delete duplicate records, keeping only the oldest one
-    const [oldest, ...duplicates] = existingScans.sort((a, b) => 
-      new Date(a.$createdAt) - new Date(b.$createdAt)
+    const [oldest, ...duplicates] = existingScans.sort(
+      (a, b) => new Date(a.$createdAt) - new Date(b.$createdAt)
     );
-    
-    await Promise.all(duplicates.map(duplicate => 
-      databases.deleteDocument(
-        conf.appwriteDatabaseId,
-        conf.appwriteAttendanceLogsCollectionId,
-        duplicate.$id
+
+    await Promise.all(
+      duplicates.map((duplicate) =>
+        databases.deleteDocument(
+          conf.appwriteDatabaseId,
+          conf.appwriteAttendanceLogsCollectionId,
+          duplicate.$id
+        )
       )
-    ));
-    
+    );
+
     existingScans = [oldest];
   }
 
   const currentRecord = existingScans[0];
-  
+
   // Don't allow multiple check-outs
-  if (currentRecord?.OutTime && currentRecord.OutTime !== '0.00' && currentRecord.InTime !== '0.00') {
-    throw new Error('Employee has already checked out today');
+  if (
+    currentRecord?.OutTime &&
+    currentRecord.OutTime !== "0.00" &&
+    currentRecord.InTime !== "0.00"
+  ) {
+    throw new Error("Employee has already checked out today");
   }
 
   // Skip time validations for weekends
@@ -202,7 +207,7 @@ const validateAttendance = async (scanTime, employee, existingScans = []) => {
   }
 
   // Validate check-in/out times for weekdays
-  if (!currentRecord || currentRecord.InTime === '0.00') {
+  if (!currentRecord || currentRecord.InTime === "0.00") {
     // Validate check-in time
     const isValidCheckIn = TimeUtils.isTimeBetween(
       scanTime,
@@ -212,7 +217,9 @@ const validateAttendance = async (scanTime, employee, existingScans = []) => {
     );
 
     if (!isValidCheckIn) {
-      throw new Error(`Invalid check-in time for ${shift.name}. Valid time: ${shift.timings.validCheckIn.start} - ${shift.timings.validCheckIn.end}`);
+      throw new Error(
+        `Invalid check-in time for ${shift.name}. Valid time: ${shift.timings.validCheckIn.start} - ${shift.timings.validCheckIn.end}`
+      );
     }
   } else {
     // Validate check-out time
@@ -224,7 +231,9 @@ const validateAttendance = async (scanTime, employee, existingScans = []) => {
     );
 
     if (!isValidCheckOut) {
-      throw new Error(`Invalid check-out time for ${shift.name}. Valid time: ${shift.timings.validCheckOut.start} - ${shift.timings.validCheckOut.end}`);
+      throw new Error(
+        `Invalid check-out time for ${shift.name}. Valid time: ${shift.timings.validCheckOut.start} - ${shift.timings.validCheckOut.end}`
+      );
     }
   }
 
@@ -236,20 +245,17 @@ const processAttendanceScan = async (employeeId, scanTime) => {
   try {
     const employee = await cache.getEmployee(employeeId);
     if (!employee) {
-      throw new Error('Employee not found');
+      throw new Error("Employee not found");
     }
 
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = format(new Date(), "yyyy-MM-dd");
     const isWeekend = isNonWorkingDay(today);
 
     // Get existing scans
     const todayScans = await databases.listDocuments(
       conf.appwriteDatabaseId,
       conf.appwriteAttendanceLogsCollectionId,
-      [
-        Query.equal('EmployeeID', employeeId),
-        Query.equal('Date', today)
-      ]
+      [Query.equal("EmployeeID", employeeId), Query.equal("Date", today)]
     );
 
     const existingScans = todayScans.documents;
@@ -261,10 +267,10 @@ const processAttendanceScan = async (employeeId, scanTime) => {
       const currentRecord = existingScans[0];
 
       // If InTime is 0.00, this is first scan
-      if (currentRecord.InTime === '0.00') {
+      if (currentRecord.InTime === "0.00") {
         const updatedRecord = {
           InTime: scanTime,
-          Status: isWeekend ? 'WEEKEND' : 'PRESENT'
+          Status: isWeekend ? "WEEKEND" : "PRESENT",
         };
 
         const result = await databases.updateDocument(
@@ -278,35 +284,39 @@ const processAttendanceScan = async (employeeId, scanTime) => {
       }
 
       // Calculate total hours worked
-      const totalHours = TimeUtils.calculateDuration(
-        currentRecord.InTime, 
-        scanTime,
-        SHIFT_CONFIGS[employee.Shift]?.nextDayCheckout || false
-      ) / 60; // Convert minutes to hours
+      const totalHours =
+        TimeUtils.calculateDuration(
+          currentRecord.InTime,
+          scanTime,
+          SHIFT_CONFIGS[employee.Shift]?.nextDayCheckout || false
+        ) / 60; // Convert minutes to hours
 
       // Determine status based on hours worked
       let status;
 
       if (isWeekend) {
         // Weekend status determination
-        status = totalHours >= UNIVERSAL_RULES.WEEKEND_MINIMUM ? 'WEEKEND_OT' : 'WEEKEND';
+        status =
+          totalHours >= UNIVERSAL_RULES.WEEKEND_MINIMUM
+            ? "WEEKEND_OT"
+            : "WEEKEND";
       } else {
         // Weekday status determination
         if (totalHours >= UNIVERSAL_RULES.OVERTIME_THRESHOLD) {
-          status = 'OVERTIME';
+          status = "OVERTIME";
         } else if (totalHours >= UNIVERSAL_RULES.MIN_HOURS.FULL_DAY) {
-          status = 'PRESENT';
+          status = "PRESENT";
         } else if (totalHours >= UNIVERSAL_RULES.MIN_HOURS.HALF_DAY) {
-          status = 'HALF_DAY';
+          status = "HALF_DAY";
         } else {
-          status = 'ABSENT';
+          status = "ABSENT";
         }
       }
 
       const updatedRecord = {
         OutTime: scanTime,
         TotalTime: parseFloat(totalHours.toFixed(2)),
-        Status: status
+        Status: status,
       };
 
       const result = await databases.updateDocument(
@@ -321,29 +331,29 @@ const processAttendanceScan = async (employeeId, scanTime) => {
       // Create new attendance record
       const newRecord = {
         EmployeeID: employee.EmployeeID,
-        FullName: employee.FullName || '',
-        Position: employee.Position || '',
-        Department: employee.Department || '',
-        Supervisor: employee.Supervisor || '',
-        Shift: employee.Shift || 'MORNING',
+        FullName: employee.FullName || "",
+        Position: employee.Position || "",
+        Department: employee.Department || "",
+        Supervisor: employee.Supervisor || "",
+        Shift: employee.Shift || "MORNING",
         Date: today,
-        Status: isWeekend ? 'WEEKEND' : 'PRESENT',
+        Status: isWeekend ? "WEEKEND" : "PRESENT",
         InTime: scanTime,
-        OutTime: '0.00',
-        TotalTime: 0
+        OutTime: "0.00",
+        TotalTime: 0,
       };
 
       const result = await databases.createDocument(
         conf.appwriteDatabaseId,
         conf.appwriteAttendanceLogsCollectionId,
-        'unique()',
+        "unique()",
         newRecord
       );
 
       return result;
     }
   } catch (error) {
-    console.error('Error in processAttendanceScan:', error);
+    console.error("Error in processAttendanceScan:", error);
     showError(error.message);
     throw error;
   }
@@ -358,35 +368,37 @@ const cache = {
   CACHE_DURATION: 1 * 60 * 1000, // Reduced to 1 minute for testing
 
   async getLogs(date, startDate, endDate, offset = 0) {
-    const cacheKey = `${date || 'all'}_${startDate || 'none'}_${endDate || 'none'}_${offset}`;
+    const cacheKey = `${date || "all"}_${startDate || "none"}_${
+      endDate || "none"
+    }_${offset}`;
     const now = Date.now();
 
     // Check cache first
     if (this.attendanceLogs.has(cacheKey)) {
       const cached = this.attendanceLogs.get(cacheKey);
       if (now - cached.timestamp < this.CACHE_DURATION) {
-        console.log('🔵 Using cached data for:', cacheKey);
+        console.log("🔵 Using cached data for:", cacheKey);
         return cached.data;
       }
-      console.log('🔄 Cache expired for:', cacheKey);
+      console.log("🔄 Cache expired for:", cacheKey);
     }
 
     // Fetch new data from Appwrite
-    console.log('📡 Fetching fresh data from Appwrite for:', cacheKey);
+    console.log("📡 Fetching fresh data from Appwrite for:", cacheKey);
     const logs = await fetchAttendanceLogsRaw(date, startDate, endDate, offset);
     console.log(`✅ Fetched ${logs.length} records from Appwrite`);
-    
+
     // Cache the result
     this.attendanceLogs.set(cacheKey, {
       data: logs,
-      timestamp: now
+      timestamp: now,
     });
 
     return logs;
   },
 
   clearCache(type = "all") {
-    console.log('🧹 Clearing cache:', type);
+    console.log("🧹 Clearing cache:", type);
     if (type === "all" || type === "employees") {
       this.employees = null;
       this.employeesByID.clear();
@@ -397,7 +409,7 @@ const cache = {
   },
 
   invalidateDate(date) {
-    console.log('🔄 Invalidating cache for date:', date);
+    console.log("🔄 Invalidating cache for date:", date);
     for (const [key] of this.attendanceLogs) {
       if (key.includes(date)) {
         this.attendanceLogs.delete(key);
@@ -413,17 +425,17 @@ const cache = {
           conf.appwriteDatabaseId,
           conf.appwriteEmployeeCollectionId
         );
-        
+
         if (!response || !response.documents) {
-          console.error('Invalid employee response:', response);
+          console.error("Invalid employee response:", response);
           return [];
         }
 
         this.employees = response.documents;
-        
+
         // Update the employee map
         this.employeesByID = new Map(
-          this.employees.map(emp => [emp.$id, emp])
+          this.employees.map((emp) => [emp.$id, emp])
         );
         this.lastFetch = now;
       } catch (error) {
@@ -443,7 +455,7 @@ const cache = {
     // Refresh cache if employee not found
     await this.getEmployees();
     return this.employeesByID.get(employeeId);
-  }
+  },
 };
 
 // Raw fetch function - lower level implementation
@@ -454,11 +466,17 @@ const fetchAttendanceLogsRaw = async (
   offset = 0
 ) => {
   try {
-    console.log('📝 Fetching logs with params:', { date, startDate, endDate, offset });
-    
+    console.log("📝 Fetching logs with params:", {
+      date,
+      startDate,
+      endDate,
+      offset,
+    });
+
     const queries = [
       Query.limit(PAGE_SIZE),
-      Query.offset(offset)
+      Query.offset(offset),
+      Query.orderAsc("EmployeeID"),
     ];
 
     if (date) {
@@ -473,7 +491,7 @@ const fetchAttendanceLogsRaw = async (
 
     while (hasMore) {
       console.log(`📥 Fetching batch at offset ${currentOffset}...`);
-      
+
       // Update offset in queries
       queries[1] = Query.offset(currentOffset);
 
@@ -484,17 +502,19 @@ const fetchAttendanceLogsRaw = async (
       );
 
       if (!response.documents || response.documents.length === 0) {
-        console.log('📭 No more documents found');
+        console.log("📭 No more documents found");
         hasMore = false;
         break;
       }
 
       allDocuments = [...allDocuments, ...response.documents];
-      console.log(`📦 Batch received: ${response.documents.length} documents (Total: ${allDocuments.length})`);
+      console.log(
+        `📦 Batch received: ${response.documents.length} documents (Total: ${allDocuments.length})`
+      );
 
       // Check if we received less than PAGE_SIZE documents
       if (response.documents.length < PAGE_SIZE) {
-        console.log('📬 Last batch received (less than PAGE_SIZE)');
+        console.log("📬 Last batch received (less than PAGE_SIZE)");
         hasMore = false;
       } else {
         currentOffset += PAGE_SIZE;
@@ -508,9 +528,11 @@ const fetchAttendanceLogsRaw = async (
     }
 
     // Log the actual employee IDs we got
-    const employeeIds = [...new Set(allDocuments.map(doc => doc.EmployeeID))].sort();
-    console.log('📋 Found records for employees:', employeeIds);
-    
+    const employeeIds = [
+      ...new Set(allDocuments.map((doc) => doc.EmployeeID)),
+    ].sort();
+    console.log("📋 Found records for employees:", employeeIds);
+
     console.log(`✅ Found total ${allDocuments.length} documents`);
     return allDocuments;
   } catch (error) {
@@ -528,32 +550,37 @@ const fetchAttendanceLogs = async (
   offset = 0
 ) => {
   try {
-    console.log('🔍 Fetching attendance logs:', { date, startDate, endDate });
-    
+    console.log("🔍 Fetching attendance logs:", { date, startDate, endDate });
+
     // Clear cache before fetching to ensure fresh data
     cache.clearCache("logs");
-    
+
     // Get logs from Appwrite
     const logs = await cache.getLogs(date, startDate, endDate, offset);
-    
+
     // Only process today's logs for real-time updates
-    const today = format(new Date(), 'yyyy-MM-dd');
-    if (date === today || (!date && (!startDate || startDate <= today) && (!endDate || endDate >= today))) {
-      const todayLogs = logs.filter(log => log.Date === today);
+    const today = format(new Date(), "yyyy-MM-dd");
+    if (
+      date === today ||
+      (!date &&
+        (!startDate || startDate <= today) &&
+        (!endDate || endDate >= today))
+    ) {
+      const todayLogs = logs.filter((log) => log.Date === today);
       if (todayLogs.length > 0) {
         throttledUpdateAllStatuses();
       }
     }
 
     // Ensure all required fields are present
-    const processedLogs = logs.map(log => ({
+    const processedLogs = logs.map((log) => ({
       ...log,
-      EmployeeID: log.EmployeeID || '',
-      Date: log.Date || '',
-      InTime: log.InTime || '0.00',
-      OutTime: log.OutTime || '0.00',
+      EmployeeID: log.EmployeeID || "",
+      Date: log.Date || "",
+      InTime: log.InTime || "0.00",
+      OutTime: log.OutTime || "0.00",
       TotalTime: log.TotalTime || 0,
-      Status: log.Status || 'ABSENT'
+      Status: log.Status || "ABSENT",
     }));
 
     console.log(`✨ Returning ${processedLogs.length} processed logs`);
@@ -567,13 +594,13 @@ const fetchAttendanceLogs = async (
 // Optimized markMissingEmployeesAsAbsent with batching
 const markMissingEmployeesAsAbsent = async (currentLogs) => {
   try {
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = format(new Date(), "yyyy-MM-dd");
     const employees = await cache.getEmployees();
     if (!employees || !Array.isArray(employees)) return [];
 
     // Create a map of existing logs for quick lookup
     const existingLogsMap = new Map(
-      currentLogs.map(log => [log.EmployeeID, log])
+      currentLogs.map((log) => [log.EmployeeID, log])
     );
 
     // Collect employees who need status updates
@@ -584,9 +611,9 @@ const markMissingEmployeesAsAbsent = async (currentLogs) => {
       // Skip if employee already has a log
       if (existingLogsMap.has(employee.$id)) continue;
 
-      const shift = SHIFT_CONFIGS[employee.Shift || 'MORNING'];
-      const currentTime = format(new Date(), 'HH:mm');
-      
+      const shift = SHIFT_CONFIGS[employee.Shift || "MORNING"];
+      const currentTime = format(new Date(), "HH:mm");
+
       // Only mark as absent if we're past the grace period for their shift
       const shiftStartMinutes = TimeUtils.toMinutes(shift.timings.start);
       const currentMinutes = TimeUtils.toMinutes(currentTime);
@@ -596,19 +623,19 @@ const markMissingEmployeesAsAbsent = async (currentLogs) => {
         updates.push({
           employeeId: employee.$id,
           date: today,
-          status: 'ABSENT'
+          status: "ABSENT",
         });
 
         newAbsentLogs.push({
           EmployeeID: employee.$id,
           Name: employee.Name,
           Position: employee.Position,
-          Shift: employee.Shift || 'MORNING',
+          Shift: employee.Shift || "MORNING",
           Date: today,
-          InTime: '0.00',
-          OutTime: '0.00',
+          InTime: "0.00",
+          OutTime: "0.00",
           TotalTime: 0,
-          Status: 'ABSENT'
+          Status: "ABSENT",
         });
       }
     }
@@ -620,7 +647,7 @@ const markMissingEmployeesAsAbsent = async (currentLogs) => {
 
     return newAbsentLogs;
   } catch (error) {
-    console.error('Error in markMissingEmployeesAsAbsent:', error);
+    console.error("Error in markMissingEmployeesAsAbsent:", error);
     throw error;
   }
 };
@@ -698,7 +725,7 @@ const updateEmployeeStatus = async (
         Status: newStatus,
         InTime: "0.00",
         OutTime: "0.00",
-        TotalTime: 0
+        TotalTime: 0,
       };
 
       const result = await databases.createDocument(
@@ -755,8 +782,17 @@ const fillMissingDates = (logs, startDate, endDate) => {
 };
 
 // Export logs to CSV
-const exportLogsToCSV = (logs, startDate, endDate) => {
+const exportLogsToCSV = (logs, startDate, endDate, employeeId = null) => {
   if (!logs.length) {
+    return false;
+  }
+
+  // Filter logs by employee ID if provided
+  const logsToExport = employeeId
+    ? logs.filter((log) => log.EmployeeID === employeeId)
+    : logs;
+
+  if (logsToExport.length === 0) {
     return false;
   }
 
@@ -777,7 +813,7 @@ const exportLogsToCSV = (logs, startDate, endDate) => {
   const headerRow = headerOrder.join(",");
 
   // Map each log to a CSV row with values in the same order as headers
-  const csvData = logs.map((log) => {
+  const csvData = logsToExport.map((log) => {
     return headerOrder
       .map((header) => {
         const value = log[header] || "";
@@ -795,7 +831,13 @@ const exportLogsToCSV = (logs, startDate, endDate) => {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `attendance_logs_${startDate}_to_${endDate}.csv`;
+
+  // Create custom filename based on whether it's for a specific employee
+  const filename = employeeId
+    ? `employee_${employeeId}_${startDate}_to_${endDate}.csv`
+    : `attendance_logs_${startDate}_to_${endDate}.csv`;
+
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -807,50 +849,70 @@ const exportLogsToCSV = (logs, startDate, endDate) => {
 // Helper function to check if a date is a weekend
 const isNonWorkingDay = (dateString) => {
   // Parse date in local timezone to avoid UTC conversion issues
-  const [year, month, day] = dateString.split('-').map(Number);
-  const date = new Date(year, month - 1, day);  // month is 0-based in Date constructor
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day); // month is 0-based in Date constructor
   const dayOfWeek = date.getDay();
-  
+
   // Check if it's weekend (Saturday = 6, Sunday = 0)
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  
+
   return isWeekend;
 };
 
 // Improved attendance status determination
-const determineAttendanceStatus = (inTime, outTime, totalTime, employeeShift, dateString) => {
+const determineAttendanceStatus = (
+  inTime,
+  outTime,
+  totalTime,
+  employeeShift,
+  dateString
+) => {
   // Check cache first
-  const cachedResult = cache.getStatus(inTime, outTime, totalTime, employeeShift, dateString);
+  const cachedResult = cache.getStatus(
+    inTime,
+    outTime,
+    totalTime,
+    employeeShift,
+    dateString
+  );
   if (cachedResult) return cachedResult;
 
   const isWeekend = isNonWorkingDay(dateString);
   const shift = SHIFT_CONFIGS[employeeShift];
-  
+
   if (!shift) {
-    return { status: 'Invalid', type: 'ERROR', remarks: 'Invalid shift configuration' };
+    return {
+      status: "Invalid",
+      type: "ERROR",
+      remarks: "Invalid shift configuration",
+    };
   }
 
   // No check-in recorded
-  if (!inTime || inTime === '0.00') {
-    return { 
-      status: isWeekend ? 'Weekend' : 'Absent',
-      type: isWeekend ? 'WEEKEND' : 'ABSENT',
-      remarks: 'No check-in recorded',
+  if (!inTime || inTime === "0.00") {
+    return {
+      status: isWeekend ? "Weekend" : "Absent",
+      type: isWeekend ? "WEEKEND" : "ABSENT",
+      remarks: "No check-in recorded",
       workedHours: 0,
-      overtimeHours: 0
+      overtimeHours: 0,
     };
   }
 
   // Calculate actual worked hours considering breaks
-  const workedHours = calculateWorkedHours(inTime, outTime || format(new Date(), 'HH:mm'), shift);
+  const workedHours = calculateWorkedHours(
+    inTime,
+    outTime || format(new Date(), "HH:mm"),
+    shift
+  );
   let overtimeHours = 0;
-  let status = 'Present';
-  let type = 'PRESENT';
+  let status = "Present";
+  let type = "PRESENT";
   let remarks = [];
 
   if (isWeekend) {
-    status = 'Weekend';
-    type = 'WEEKEND';
+    status = "Weekend";
+    type = "WEEKEND";
     overtimeHours = workedHours; // All hours on weekend count as overtime
     if (overtimeHours > 0) {
       remarks.push(`Weekend hours: ${overtimeHours.toFixed(2)}`);
@@ -860,20 +922,20 @@ const determineAttendanceStatus = (inTime, outTime, totalTime, employeeShift, da
     if (workedHours > UNIVERSAL_RULES.OVERTIME_THRESHOLD) {
       // Calculate overtime from regular hours (8 hours), not threshold
       overtimeHours = workedHours - UNIVERSAL_RULES.MIN_HOURS.FULL_DAY;
-      type = 'OVERTIME';
+      type = "OVERTIME";
       remarks.push(`Overtime: ${overtimeHours.toFixed(2)} hours`);
     }
 
     // Handle half day and absent cases
     if (workedHours < UNIVERSAL_RULES.MIN_HOURS.HALF_DAY) {
-      status = 'Absent';
-      type = 'ABSENT';
-      remarks = ['Insufficient hours worked'];
+      status = "Absent";
+      type = "ABSENT";
+      remarks = ["Insufficient hours worked"];
       overtimeHours = 0;
     } else if (workedHours < UNIVERSAL_RULES.MIN_HOURS.FULL_DAY) {
-      status = 'Half Day';
-      type = 'HALF_DAY';
-      remarks = ['Less than full day hours'];
+      status = "Half Day";
+      type = "HALF_DAY";
+      remarks = ["Less than full day hours"];
       overtimeHours = 0;
     }
   }
@@ -881,13 +943,20 @@ const determineAttendanceStatus = (inTime, outTime, totalTime, employeeShift, da
   const result = {
     status,
     type,
-    remarks: remarks.join(', ') || 'Regular attendance',
+    remarks: remarks.join(", ") || "Regular attendance",
     workedHours: parseFloat(workedHours.toFixed(2)),
-    overtimeHours: parseFloat(overtimeHours.toFixed(2))
+    overtimeHours: parseFloat(overtimeHours.toFixed(2)),
   };
 
   // Cache the result
-  cache.cacheStatus(inTime, outTime, totalTime, employeeShift, dateString, result);
+  cache.cacheStatus(
+    inTime,
+    outTime,
+    totalTime,
+    employeeShift,
+    dateString,
+    result
+  );
   return result;
 };
 
@@ -900,7 +969,7 @@ const calculateWorkedHours = (inTime, outTime, shift) => {
   let totalMinutes = 0;
 
   if (shift.nextDayCheckout && outMinutes < inMinutes) {
-    totalMinutes = (24 * 60 - inMinutes) + outMinutes;
+    totalMinutes = 24 * 60 - inMinutes + outMinutes;
   } else {
     totalMinutes = outMinutes - inMinutes;
   }
@@ -911,7 +980,7 @@ const calculateWorkedHours = (inTime, outTime, shift) => {
 
 // Helper function to convert time to minutes
 const timeToMinutes = (time) => {
-  const [hours, minutes] = time.split(':').map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
   return hours * 60 + minutes;
 };
 
@@ -921,7 +990,8 @@ const isTimeBefore = (time1, time2, isOvernight = false) => {
   const minutes2 = timeToMinutes(time2);
 
   if (isOvernight) {
-    if (minutes1 < 12 * 60) { // If time1 is in next day (AM)
+    if (minutes1 < 12 * 60) {
+      // If time1 is in next day (AM)
       return minutes1 < minutes2 && minutes2 > 12 * 60;
     }
     return minutes1 < minutes2;
@@ -936,7 +1006,8 @@ const isTimeAfter = (time1, time2, isOvernight = false) => {
   const minutes2 = timeToMinutes(time2);
 
   if (isOvernight) {
-    if (minutes1 < 12 * 60) { // If time1 is in next day (AM)
+    if (minutes1 < 12 * 60) {
+      // If time1 is in next day (AM)
       return minutes1 > minutes2 || minutes2 < 12 * 60;
     }
     return minutes1 > minutes2;
@@ -951,14 +1022,14 @@ const diagnoseScanIssue = (employeeId) => {
     try {
       const employee = await cache.getEmployee(employeeId);
       if (!employee) {
-        resolve({success: false, message: "Employee not found"});
+        resolve({ success: false, message: "Employee not found" });
         return;
       }
-      
+
       const now = new Date();
       const today = format(now, "yyyy-MM-dd");
       const yesterday = format(subMonths(now, 0), "yyyy-MM-dd");
-      
+
       const [todayRecords, yesterdayRecords] = await Promise.all([
         databases.listDocuments(
           conf.appwriteDatabaseId,
@@ -966,7 +1037,7 @@ const diagnoseScanIssue = (employeeId) => {
           [
             Query.equal("EmployeeID", employeeId),
             Query.equal("Date", today),
-            Query.orderDesc("$updatedAt"), 
+            Query.orderDesc("$updatedAt"),
           ]
         ),
         databases.listDocuments(
@@ -977,50 +1048,52 @@ const diagnoseScanIssue = (employeeId) => {
             Query.equal("Date", yesterday),
             Query.orderDesc("$updatedAt"),
           ]
-        )
+        ),
       ]);
-      
+
       resolve({
         success: true,
         employee,
         todayRecords: todayRecords.documents,
         yesterdayRecords: yesterdayRecords.documents,
         currentHour: now.getHours(),
-        currentMinute: now.getMinutes()
+        currentMinute: now.getMinutes(),
       });
     } catch (error) {
-      resolve({success: false, message: error.message});
+      resolve({ success: false, message: error.message });
     }
   });
 };
 
 // Update all statuses
 const updateAllStatuses = async () => {
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = format(new Date(), "yyyy-MM-dd");
   const isWeekend = isNonWorkingDay(today);
 
   try {
     const logs = await databases.listDocuments(
       conf.appwriteDatabaseId,
       conf.appwriteAttendanceLogsCollectionId,
-      [Query.equal('Date', today)]
+      [Query.equal("Date", today)]
     );
 
     if (isWeekend) {
       // Update all records to WEEKEND status
-      await Promise.all(logs.documents.map(log =>
-        databases.updateDocument(
-          conf.appwriteDatabaseId,
-          conf.appwriteAttendanceLogsCollectionId,
-          log.$id,
-          { Status: 'WEEKEND' }
+      await Promise.all(
+        logs.documents.map((log) =>
+          databases.updateDocument(
+            conf.appwriteDatabaseId,
+            conf.appwriteAttendanceLogsCollectionId,
+            log.$id,
+            { Status: "WEEKEND" }
+          )
         )
-      ));
+      );
     }
 
     return { success: true };
   } catch (error) {
-    console.error('Error updating statuses:', error);
+    console.error("Error updating statuses:", error);
     return { success: false, error: error.message };
   }
 };
@@ -1086,24 +1159,26 @@ const debounce = (fn, delay) => {
 };
 
 // Add at the top with other constants
-const isDevelopment = process.env.NODE_ENV === 'development';
+const isDevelopment = process.env.NODE_ENV === "development";
 let isTestMode = isDevelopment;
 
 // Add these functions before the AttendanceService export
 const enableTestMode = () => {
   isTestMode = true;
-  console.log('⚠️ Attendance Test Mode Enabled - Time restrictions bypassed');
+  console.log("⚠️ Attendance Test Mode Enabled - Time restrictions bypassed");
 };
 
 const disableTestMode = () => {
   isTestMode = false;
-  console.log('✅ Attendance Test Mode Disabled - Normal time restrictions active');
+  console.log(
+    "✅ Attendance Test Mode Disabled - Normal time restrictions active"
+  );
 };
 
 // Export object with optimized functions
 const AttendanceService = {
   fetchAttendanceLogs,
-  
+
   fetchEmployees: cache.getEmployees,
   updateEmployeeStatus,
   batchUpdateStatuses,
@@ -1131,4 +1206,4 @@ const AttendanceService = {
   invalidateDate: (date) => cache.invalidateDate(date),
 };
 
-export default AttendanceService; 
+export default AttendanceService;
