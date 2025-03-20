@@ -1,10 +1,4 @@
-// import React, { useState, useEffect, useRef } from "react";
-// import { Camera, User, RefreshCw } from "lucide-react";
-// import jsQR from "jsqr";
-// import { Query } from "appwrite";
-// import { databases } from "../Appwrite/appwriteService";
-// import conf from "../conf/conf";
-// import showError from "./Notifications/Error";
+
 import AttendanceService from './services/attendanceService';
 import { format } from 'date-fns';
 import showError from "./Notifications/Error";
@@ -210,19 +204,6 @@ const ScanQR = () => {
     return true;
   };
 
-  // const formatTime = (date) => {
-  //   return date.toLocaleTimeString([], {
-  //     hour: "2-digit",
-  //     minute: "2-digit",
-  //     hour12: true,
-  //   });
-  // };
-
-  // const determineStatus = (totalTime) => {
-  //   if (totalTime >= 8) return "OVERTIME";
-  //   if (totalTime < 4) return "HALF-DAY";
-  //   return "PRESENT";
-  // };
 
   const markAttendance = async (employee) => {
     console.log("Marking attendance for:", employee);
@@ -260,63 +241,7 @@ const ScanQR = () => {
     alert(`${type === "success" ? "" : ""} ${message}`);
   };
 
-  // const calculateTotalTime = (inTime, outTime) => {
-  //   if (!inTime || !outTime) {
-  //     console.error("Invalid inTime or outTime", { inTime, outTime });
-  //     return 0;
-  //   }
-
-  //   try {
-  //     const parseTime = (timeStr) => {
-  //       // Handle various time formats
-  //       const timeRegex = /(\d{1,2}):(\d{2})\s?(AM|PM)/i;
-  //       const match = timeStr.match(timeRegex);
-
-  //       if (!match) {
-  //         throw new Error(`Invalid time format: ${timeStr}`);
-  //       }
-
-  //       let [_, hours, minutes, modifier] = match;
-  //       hours = parseInt(hours, 10);
-  //       minutes = parseInt(minutes, 10);
-  //       modifier = modifier.toUpperCase();
-
-  //       if (modifier === "PM" && hours !== 12) hours += 12;
-  //       if (modifier === "AM" && hours === 12) hours = 0;
-
-  //       return { hours, minutes };
-  //     };
-
-  //     const inParsed = parseTime(inTime);
-  //     const outParsed = parseTime(outTime);
-
-  //     // Calculate minutes elapsed
-  //     let inMinutes = inParsed.hours * 60 + inParsed.minutes;
-  //     let outMinutes = outParsed.hours * 60 + outParsed.minutes;
-
-  //     // Handle overnight shifts (when outTime is on the next day)
-  //     if (outMinutes < inMinutes) {
-  //       outMinutes += 24 * 60; // Add a full day in minutes
-  //     }
-
-  //     const totalMinutes = outMinutes - inMinutes;
-  //     if (totalMinutes < 0) {
-  //       console.error("Invalid time calculation", {
-  //         inTime,
-  //         outTime,
-  //         totalMinutes,
-  //       });
-  //       return 0;
-  //     }
-
-  //     // Convert to hours with two decimal places
-  //     return parseFloat((totalMinutes / 60).toFixed(2));
-  //   } catch (error) {
-  //     console.error("Error calculating total time:", error);
-  //     return 0;
-  //   }
-  // };
-
+  
   const startScanning = () => {
     setScanning(true);
     setScannedEmployee(null);

@@ -138,67 +138,67 @@ const AttendanceLogs = () => {
   };
   // Main function to load attendance logs
   const loadLogs = useCallback(async () => {
-    // if (initialLoadComplete && !selectedDate) {
-    //   return; // Skip redundant loads
-    // }
-
     setIsLoading(true);
     try {
-      // Try to get cached data first
-      const cachedData = localStorage.getItem("attendanceLogs");
-      if (cachedData && !selectedDate) {
+      const today = format(new Date(), "yyyy-MM-dd");
+      const dateToFetch = selectedDate || today; // Use today's date if no date selected
+
+      // Always fetch fresh data for today
+      if (dateToFetch === today) {
+        localStorage.removeItem("attendanceLogs"); // Clear cache for today's data
+
+        // Create default attendance records for all employees if today is selected
+        await AttendanceService.createDefaultAttendanceRecords(today);
+      }
+
+      // Try to get cached data for non-today dates
+      const cachedData = dateToFetch !== today ? localStorage.getItem("attendanceLogs") : null;
+      if (cachedData) {
         const parsed = JSON.parse(cachedData);
         if (parsed.timestamp && parsed.data) {
           const { timestamp, data } = parsed;
-          const oneDay = 24 * 60 * 60 * 1000;
-          if (Date.now() - timestamp < oneDay) {
+          const oneHour = 60 * 60 * 1000; // Cache for 1 hour only
+          if (Date.now() - timestamp < oneHour) {
             setLogs(data);
-
-            // Extract positions from cached data
             if (data.length > 0) {
               const uniquePositions = Array.from(
                 new Set(data.map((log) => log.Position?.trim()).filter(Boolean))
               ).sort();
               setPositions(uniquePositions);
             }
-
             setIsLoading(false);
             return;
           }
         }
       }
 
-      // If cache not available or selectedDate changed, fetch data
-      let fetchedLogs;
-      if (selectedDate) {
-        fetchedLogs = await AttendanceService.fetchAttendanceLogs(selectedDate);
-      } else {
-        fetchedLogs = await AttendanceService.fetchAttendanceLogs();
-        // Only cache the full dataset, not filtered by date
-        localStorage.setItem(
-          "attendanceLogs",
-          JSON.stringify({ timestamp: Date.now(), data: fetchedLogs })
-        );
-      }
+      // Fetch fresh data
+      const fetchedLogs = await AttendanceService.fetchAttendanceLogs(dateToFetch);
 
       // Remove duplicate logs based on EmployeeID and Date
       const uniqueLogsMap = new Map();
       fetchedLogs.forEach((log) => {
         const key = `${log.EmployeeID}_${log.Date}`;
-        // Only keep the latest entry (assuming entries have timestamps or IDs)
         if (
           !uniqueLogsMap.has(key) ||
-          (log.$id &&
-            (!uniqueLogsMap.get(key).$id ||
-              log.$id > uniqueLogsMap.get(key).$id))
+          (log.$id && (!uniqueLogsMap.get(key).$id || log.$id > uniqueLogsMap.get(key).$id))
         ) {
           uniqueLogsMap.set(key, log);
         }
       });
 
       const uniqueLogs = Array.from(uniqueLogsMap.values());
+
+      // Only cache if not today's data
+      if (dateToFetch !== today) {
+        localStorage.setItem(
+          "attendanceLogs",
+          JSON.stringify({ timestamp: Date.now(), data: uniqueLogs })
+        );
+      }
+
       setLogs(uniqueLogs);
-      setOffset(0); // Reset offset when data changes
+      setOffset(0);
 
       // Extract positions
       if (uniqueLogs.length > 0) {
@@ -207,39 +207,12 @@ const AttendanceLogs = () => {
         ).sort();
         setPositions(uniquePositions);
       }
-
-      // For today's date, mark missing employees as absent
-      if (
-        selectedDate === format(new Date(), "yyyy-MM-dd") &&
-        uniqueLogs.length > 0
-      ) {
-        const absentLogs = await AttendanceService.markMissingEmployeesAsAbsent(
-          uniqueLogs
-        );
-
-        if (absentLogs.length > 0) {
-          // Update state with new absent logs
-          setLogs((prevLogs) => {
-            // Create a Set of existing unique keys to avoid duplicates
-            const existingKeys = new Set(
-              prevLogs.map((log) => `${log.EmployeeID}_${log.Date}`)
-            );
-
-            // Filter out any duplicate logs before adding
-            const newAbsentLogs = absentLogs.filter((log) => {
-              const key = `${log.EmployeeID}_${log.Date}`;
-              return !existingKeys.has(key);
-            });
-
-            return [...prevLogs, ...newAbsentLogs];
-          });
-        }
-      }
-      setInitialLoadComplete(true);
     } catch (error) {
-      showError("Error loading logs!");
+      console.error("Error loading logs:", error);
+      showError("Failed to load attendance logs");
     } finally {
       setIsLoading(false);
+      setInitialLoadComplete(true);
     }
   }, [selectedDate]);
 

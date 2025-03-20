@@ -19,15 +19,17 @@ const PAGE_SIZE = 50; // Number of logs per request
 //   MAX_HOURS_BETWEEN_SCANS: 16 // maximum hours between check-in and check-out
 // };
 
+
+// TESTING PURPOSES ONLY
 const UNIVERSAL_RULES = {
-  GRACE_PERIOD: 15, // minutes
+  GRACE_PERIOD: 0.1, // minutes
   MIN_HOURS: {
-    FULL_DAY: 0.01, // Reduced to 6 minutes for testing
-    HALF_DAY: 0.005, // Reduced to 3 minutes for testing
+    FULL_DAY: 0.0001, // Reduced to 6 minutes for testing
+    HALF_DAY: 0.00005, // Reduced to 3 minutes for testing
   },
   OVERTIME_THRESHOLD: 0.02, // hours (8 hours + 10:15 minutes)
-  WEEKEND_MINIMUM: 0.016, // 1 minute for testing
-  CHECKOUT_BUFFER: 30, // minutes before shift end
+  WEEKEND_MINIMUM: 0.0016, // 1 minute for testing
+  CHECKOUT_BUFFER: 0.1, // minutes before shift end
   MAX_HOURS_BETWEEN_SCANS: 24, // Extended for testing
 };
 
@@ -544,7 +546,7 @@ const fetchAttendanceLogsRaw = async (
 
 // Enhanced fetchAttendanceLogs with caching and status updates
 const fetchAttendanceLogs = async (
-  date = null,
+  date = format(new Date(), "yyyy-MM-dd"), // Default to today's date if none provided
   startDate = null,
   endDate = null,
   offset = 0
@@ -592,63 +594,95 @@ const fetchAttendanceLogs = async (
 };
 
 // Optimized markMissingEmployeesAsAbsent with batching
-const markMissingEmployeesAsAbsent = async (currentLogs) => {
+const markMissingEmployeesAsAbsent = async (currentLogs, date = format(new Date(), "yyyy-MM-dd")) => {
   try {
-    const today = format(new Date(), "yyyy-MM-dd");
+    console.log(`🔍 Marking missing employees as absent for ${date}`);
+    
+    // Get all employees
     const employees = await cache.getEmployees();
-    if (!employees || !Array.isArray(employees)) return [];
+    if (!employees || !Array.isArray(employees)) {
+      console.log("❌ No employees found to mark as absent");
+      return [];
+    }
 
-    // Create a map of existing logs for quick lookup
-    const existingLogsMap = new Map(
-      currentLogs.map((log) => [log.EmployeeID, log])
-    );
+    // Create a map of current logs by employee ID
+    const currentLogsMap = new Map();
+    if (currentLogs && currentLogs.length > 0) {
+      currentLogs.forEach((log) => {
+        if (log.Date === date) {
+          currentLogsMap.set(log.EmployeeID, log);
+        }
+      });
+    }
 
+    // Get the current time
+    const currentTime = format(new Date(), "HH:mm");
+    console.log(`⏱️ Current time: ${currentTime}`);
+    
     // Collect employees who need status updates
     const updates = [];
     const newAbsentLogs = [];
 
     for (const employee of employees) {
-      // Skip if employee already has a log
-      if (existingLogsMap.has(employee.$id)) continue;
-
+      const employeeLog = currentLogsMap.get(employee.EmployeeID);
+      
+      // Skip employees who already have a non-PENDING status
+      if (employeeLog && employeeLog.Status !== "PENDING") {
+        continue;
+      }
+      
       const shift = SHIFT_CONFIGS[employee.Shift || "MORNING"];
-      const currentTime = format(new Date(), "HH:mm");
-
+      
       // Only mark as absent if we're past the grace period for their shift
       const shiftStartMinutes = TimeUtils.toMinutes(shift.timings.start);
       const currentMinutes = TimeUtils.toMinutes(currentTime);
       const graceEndMinutes = shiftStartMinutes + UNIVERSAL_RULES.GRACE_PERIOD;
-
+      
+      console.log(`👤 Employee ${employee.FullName}: shift start=${shift.timings.start}, grace end=${TimeUtils.fromMinutes(graceEndMinutes)}`);
+      
       if (currentMinutes > graceEndMinutes) {
+        console.log(`⏰ Past grace period for ${employee.FullName}, marking as ABSENT`);
+        
         updates.push({
-          employeeId: employee.$id,
-          date: today,
-          status: "ABSENT",
+          employeeId: employee.EmployeeID,
+          date: date,
+          newStatus: "ABSENT",
         });
-
-        newAbsentLogs.push({
-          EmployeeID: employee.$id,
-          Name: employee.Name,
-          Position: employee.Position,
-          Shift: employee.Shift || "MORNING",
-          Date: today,
-          InTime: "0.00",
-          OutTime: "0.00",
-          TotalTime: 0,
-          Status: "ABSENT",
-        });
+        
+        // If employee doesn't have a log yet, create one
+        if (!employeeLog) {
+          newAbsentLogs.push({
+            EmployeeID: employee.EmployeeID,
+            FullName: employee.FullName || "",
+            Position: employee.Position || "",
+            Department: employee.Department || "",
+            Supervisor: employee.Supervisor || "",
+            Shift: employee.Shift || "MORNING",
+            Date: date,
+            InTime: "0.00",
+            OutTime: "0.00",
+            TotalTime: 0,
+            Status: "ABSENT",
+          });
+        }
+      } else {
+        console.log(`⏰ Still within grace period for ${employee.FullName}, keeping as PENDING`);
       }
     }
 
-    // Batch update all statuses at once
+    // Apply batch updates if there are any
     if (updates.length > 0) {
+      console.log(`🔄 Marking ${updates.length} employees as absent`);
       await batchUpdateStatuses(updates);
+    } else {
+      console.log("✅ No employees to mark as absent");
     }
 
     return newAbsentLogs;
   } catch (error) {
-    console.error("Error in markMissingEmployeesAsAbsent:", error);
-    throw error;
+    console.error("❌ Error marking missing employees as absent:", error);
+    showError("Failed to mark missing employees as absent");
+    return [];
   }
 };
 
@@ -663,7 +697,7 @@ const batchUpdateStatuses = async (updates) => {
     const result = await updateEmployeeStatus(
       update.employeeId,
       update.date,
-      update.status,
+      update.newStatus,
       true // batch mode = true
     );
     results.push(result);
@@ -1175,6 +1209,81 @@ const disableTestMode = () => {
   );
 };
 
+// Add this function to create default attendance records for all employees
+const createDefaultAttendanceRecords = async (date = format(new Date(), "yyyy-MM-dd")) => {
+  try {
+    console.log(`🔄 Creating default attendance records for ${date}`);
+    
+    // Get all employees
+    const employees = await cache.getEmployees();
+    if (!employees || employees.length === 0) {
+      console.log("❌ No employees found to create default records");
+      return [];
+    }
+    
+    // Check for existing records for today
+    const existingRecords = await databases.listDocuments(
+      conf.appwriteDatabaseId,
+      conf.appwriteAttendanceLogsCollectionId,
+      [Query.equal("Date", date)]
+    );
+    
+    // Create a map of existing records by employee ID
+    const existingRecordsMap = new Map();
+    existingRecords.documents.forEach(record => {
+      existingRecordsMap.set(record.EmployeeID, record);
+    });
+    
+    // Create default records for employees who don't have one yet
+    const newRecords = [];
+    const createPromises = [];
+    
+    for (const employee of employees) {
+      if (!existingRecordsMap.has(employee.EmployeeID)) {
+        const newRecord = {
+          EmployeeID: employee.EmployeeID,
+          FullName: employee.FullName || "",
+          Position: employee.Position || "",
+          Department: employee.Department || "",
+          Supervisor: employee.Supervisor || "",
+          Shift: employee.Shift || "MORNING",
+          Date: date,
+          Status: "PENDING",
+          InTime: "0.00",
+          OutTime: "0.00",
+          TotalTime: 0,
+        };
+        
+        newRecords.push(newRecord);
+        
+        // Create the record in the database
+        createPromises.push(
+          databases.createDocument(
+            conf.appwriteDatabaseId,
+            conf.appwriteAttendanceLogsCollectionId,
+            "unique()",
+            newRecord
+          )
+        );
+      }
+    }
+    
+    // Wait for all records to be created
+    if (createPromises.length > 0) {
+      await Promise.allSettled(createPromises);
+      console.log(`✅ Created ${createPromises.length} default attendance records`);
+    } else {
+      console.log("ℹ️ All employees already have attendance records for today");
+    }
+    
+    return newRecords;
+  } catch (error) {
+    console.error("❌ Error creating default attendance records:", error);
+    showError("Failed to create default attendance records");
+    return [];
+  }
+};
+
 // Export object with optimized functions
 const AttendanceService = {
   fetchAttendanceLogs,
@@ -1198,6 +1307,7 @@ const AttendanceService = {
   debounce,
   createThrottle,
   diagnoseScanIssue,
+  createDefaultAttendanceRecords, // Add the new function to the exported object
   enableTestMode,
   disableTestMode,
 

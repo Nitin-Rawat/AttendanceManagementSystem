@@ -11,13 +11,27 @@ const AttendanceTable = ({
   isLoading,
   statuses,
 }) => {
-  // In your React component that displays the time:
+  // Format time display in a simple, user-friendly format
   const formatTimeDisplay = (decimalHours) => {
     if (!decimalHours && decimalHours !== 0) return "-";
+    if (decimalHours === 0) return "0 min";
 
-    const hours = Math.floor(decimalHours);
-    const minutes = Math.round((decimalHours - hours) * 60);
-    return `${hours}:${minutes.toString().padStart(2, "0")}`;
+    // Convert decimal hours to total minutes
+    const totalMinutes = Math.round(decimalHours * 60);
+    
+    // Format as hours and minutes in a user-friendly way
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min`;
+    } else {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      
+      if (minutes === 0) {
+        return `${hours} hr`;
+      } else {
+        return `${hours} hr ${minutes} min`;
+      }
+    }
   };
 
   return (
@@ -103,8 +117,8 @@ const AttendanceTable = ({
                 {log.OutTime || "N/A"}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
-                {/* {log.TotalTime} */}
                 {formatTimeDisplay(log.TotalTime)}
+                {/* {log.TotalTime * 60} hr */} 
               </td>
               <td className="px-2 py-2 my-2 whitespace-nowrap">
                 <StatusDropdown
