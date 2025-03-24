@@ -593,6 +593,55 @@ const fetchAttendanceLogs = async (
   }
 };
 
+// Fetch all logs for a single employee without pagination
+const fetchSingleEmployeeLogs = async (
+  employeeId,
+  startDate = null,
+  endDate = null
+) => {
+  try {
+    console.log("🔍 Fetching single employee logs:", { employeeId, startDate, endDate });
+
+    const queries = [
+      Query.equal("EmployeeID", employeeId),
+      Query.orderDesc("Date"),
+    ];
+
+    if (startDate && endDate) {
+      queries.push(Query.between("Date", startDate, endDate));
+    }
+
+    const response = await databases.listDocuments(
+      conf.appwriteDatabaseId,
+      conf.appwriteAttendanceLogsCollectionId,
+      queries
+    );
+
+    if (!response.documents) {
+      console.log("❌ No documents found for employee:", employeeId);
+      return [];
+    }
+
+    // Process and return all logs at once
+    const processedLogs = response.documents.map((log) => ({
+      ...log,
+      EmployeeID: log.EmployeeID || "",
+      Date: log.Date || "",
+      InTime: log.InTime || "0.00",
+      OutTime: log.OutTime || "0.00",
+      TotalTime: log.TotalTime || 0,
+      Status: log.Status || "ABSENT",
+    }));
+
+    console.log(`✨ Returning ${processedLogs.length} logs for employee ${employeeId}`);
+    return processedLogs;
+  } catch (error) {
+    console.error("❌ Error in fetchSingleEmployeeLogs:", error);
+    showError("Error fetching employee logs!");
+    return [];
+  }
+};
+
 // Optimized markMissingEmployeesAsAbsent with batching
 const markMissingEmployeesAsAbsent = async (currentLogs, date = format(new Date(), "yyyy-MM-dd")) => {
   try {
@@ -1287,7 +1336,7 @@ const createDefaultAttendanceRecords = async (date = format(new Date(), "yyyy-MM
 // Export object with optimized functions
 const AttendanceService = {
   fetchAttendanceLogs,
-
+  fetchSingleEmployeeLogs,
   fetchEmployees: cache.getEmployees,
   updateEmployeeStatus,
   batchUpdateStatuses,

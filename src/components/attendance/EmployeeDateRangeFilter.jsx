@@ -150,7 +150,7 @@ const EmployeeDateRangeFilter = ({
     setIsLoading(true);
     try {
       // Pass the currentEmployeeId as the fourth parameter
-      const completeLogs = await AttendanceService.exportLogsToCSV(
+      const completeLogs = AttendanceService.exportLogsToCSV(
         logs,
         employeeDataDateRange.start,
         employeeDataDateRange.end,
@@ -237,10 +237,8 @@ const EmployeeDateRangeFilter = ({
         </>
       ) : (
         <div className="bg-blue-50 border border-blue-300 rounded-lg p-4 flex justify-between items-center">
-          <div>
-            <span className="font-medium">
-              Viewing data for Employee ID: {currentEmployeeId}
-            </span>
+          <div className="flex max-sm:flex-col">
+            <span className="font-medium">Data of : {currentEmployeeId}</span>
             <span className="ml-4 text-gray-600">
               Date Range: {employeeDataDateRange.start} to{" "}
               {employeeDataDateRange.end}
@@ -253,7 +251,7 @@ const EmployeeDateRangeFilter = ({
             </div>
           )}
 
-          <div>
+          <div className=" flex max-sm:flex-col">
             <button
               onClick={handleExportEmployeeData}
               disabled={isLoading}

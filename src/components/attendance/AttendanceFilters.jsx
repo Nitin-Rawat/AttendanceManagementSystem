@@ -32,8 +32,38 @@ const AttendanceFilters = ({
   const handleSearchChange = (e) => {
     // Update the input field immediately for user feedback
     e.persist();
-    // Debounce the actual search operation
-    debouncedSearch(e.target.value);
+    
+    // Get the search value
+    const searchValue = e.target.value;
+    
+    // Show visual feedback
+    e.target.classList.add("bg-gray-100");
+    
+    // Check if it looks like an employee ID search
+    const isEmployeeIDSearch = searchValue.toLowerCase().includes("eid") || 
+                             /^[a-z]+-\d+$/i.test(searchValue);
+    
+    if (isEmployeeIDSearch) {
+      console.log(`🔍 Employee ID search detected: "${searchValue}"`);
+      
+      // Format the employee ID if needed
+      let formattedSearch = searchValue;
+      if (!searchValue.toLowerCase().includes("eid-") && searchValue.trim() !== "") {
+        formattedSearch = `EID-${searchValue.replace(/^eid-?/i, "")}`;
+        console.log(`🔄 Formatted search term to: "${formattedSearch}"`);
+      }
+      
+      // Set the search term immediately for employee ID searches
+      setSearchTerm(formattedSearch);
+    } else {
+      // Debounce regular searches
+      debouncedSearch(searchValue);
+    }
+    
+    // Remove visual feedback after a short delay
+    setTimeout(() => {
+      e.target.classList.remove("bg-gray-100");
+    }, 300);
   };
 
   // Handle date change

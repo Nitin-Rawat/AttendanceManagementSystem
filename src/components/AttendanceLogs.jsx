@@ -22,6 +22,7 @@ const AttendanceLogs = () => {
   const [logs, setLogs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const dateRanges = ["1 Month", "2 Months", "3 Months"];
@@ -111,14 +112,16 @@ const AttendanceLogs = () => {
   const handleEmployeeDataChange = ({ logs, employeeId, dateRange }) => {
     if (logs && logs.length > 0) {
       setLogs(logs);
+      setEmployeeSpecificMode(true);
       setCurrentEmployeeId(employeeId);
       setEmployeeDataDateRange(dateRange);
 
       // Reset filters to show only this employee's data
-      setSearchTerm(employeeId);
+      setSearchTerm("");
       setSelectedDate(""); // Clear date filter to show all dates in range
       setSelectedPosition(""); // Clear position filter
-      setSelectedStatus(""); // Clear status filter
+      // setSelectedStatus(""); // Clear status filter
+      // setCurrentEmployeeId(employeeId);
     }
   };
 
@@ -136,85 +139,46 @@ const AttendanceLogs = () => {
       loadLogs(); // Reload all logs
     }
   };
-  // Main function to load attendance logs
+
+  // Update loadLogs function
   const loadLogs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const today = format(new Date(), "yyyy-MM-dd");
-      const dateToFetch = selectedDate || today; // Use today's date if no date selected
-
-      // Always fetch fresh data for today
-      if (dateToFetch === today) {
-        localStorage.removeItem("attendanceLogs"); // Clear cache for today's data
-
-        // Create default attendance records for all employees if today is selected
-        await AttendanceService.createDefaultAttendanceRecords(today);
-      }
-
-      // Try to get cached data for non-today dates
-      const cachedData = dateToFetch !== today ? localStorage.getItem("attendanceLogs") : null;
-      if (cachedData) {
-        const parsed = JSON.parse(cachedData);
-        if (parsed.timestamp && parsed.data) {
-          const { timestamp, data } = parsed;
-          const oneHour = 60 * 60 * 1000; // Cache for 1 hour only
-          if (Date.now() - timestamp < oneHour) {
-            setLogs(data);
-            if (data.length > 0) {
-              const uniquePositions = Array.from(
-                new Set(data.map((log) => log.Position?.trim()).filter(Boolean))
-              ).sort();
-              setPositions(uniquePositions);
-            }
-            setIsLoading(false);
-            return;
-          }
-        }
-      }
-
-      // Fetch fresh data
-      const fetchedLogs = await AttendanceService.fetchAttendanceLogs(dateToFetch);
-
-      // Remove duplicate logs based on EmployeeID and Date
-      const uniqueLogsMap = new Map();
-      fetchedLogs.forEach((log) => {
-        const key = `${log.EmployeeID}_${log.Date}`;
-        if (
-          !uniqueLogsMap.has(key) ||
-          (log.$id && (!uniqueLogsMap.get(key).$id || log.$id > uniqueLogsMap.get(key).$id))
-        ) {
-          uniqueLogsMap.set(key, log);
-        }
-      });
-
-      const uniqueLogs = Array.from(uniqueLogsMap.values());
-
-      // Only cache if not today's data
-      if (dateToFetch !== today) {
-        localStorage.setItem(
-          "attendanceLogs",
-          JSON.stringify({ timestamp: Date.now(), data: uniqueLogs })
+      let fetchedLogs;
+      
+      if (employeeSpecificMode && currentEmployeeId) {
+        // Use the new function for single employee data
+        fetchedLogs = await AttendanceService.fetchSingleEmployeeLogs(
+          currentEmployeeId,
+          employeeDataDateRange.start,
+          employeeDataDateRange.end
+        );
+      } else {
+        // Use existing pagination for all employees
+        fetchedLogs = await AttendanceService.fetchAttendanceLogs(
+          selectedDate,
+          selectedRange !== "1 Month" ? format(subMonths(new Date(), parseInt(selectedRange)), "yyyy-MM-dd") : null,
+          format(new Date(), "yyyy-MM-dd"),
+          offset
         );
       }
 
-      setLogs(uniqueLogs);
-      setOffset(0);
-
-      // Extract positions
-      if (uniqueLogs.length > 0) {
-        const uniquePositions = Array.from(
-          new Set(uniqueLogs.map((log) => log.Position?.trim()).filter(Boolean))
-        ).sort();
-        setPositions(uniquePositions);
+      if (fetchedLogs.length === 0 && offset === 0) {
+        setLogs([]);
+        setHasMore(false);
+      } else if (fetchedLogs.length === 0) {
+        setHasMore(false);
+      } else {
+        setLogs(prevLogs => offset === 0 ? fetchedLogs : [...prevLogs, ...fetchedLogs]);
+        setHasMore(fetchedLogs.length === AttendanceService.PAGE_SIZE);
       }
     } catch (error) {
       console.error("Error loading logs:", error);
       showError("Failed to load attendance logs");
-    } finally {
-      setIsLoading(false);
-      setInitialLoadComplete(true);
     }
-  }, [selectedDate]);
+    setIsLoading(false);
+    setInitialLoadComplete(true);
+  }, [selectedDate, selectedRange, offset, employeeSpecificMode, currentEmployeeId, employeeDataDateRange]);
 
   // Load more logs for infinite scrolling/pagination
   const loadMoreLogs = async () => {
@@ -277,7 +241,7 @@ const AttendanceLogs = () => {
 
   // Handle exporting attendance data
   const handleExport = async () => {
-    setIsLoading(true);
+    setIsExporting(true);
 
     try {
       // Parse the number of months from the selected range
@@ -328,7 +292,7 @@ const AttendanceLogs = () => {
     } catch (error) {
       showError("Failed to export logs. Please try again.");
     } finally {
-      setIsLoading(false);
+      setIsExporting(false);
     }
   };
 
@@ -384,35 +348,68 @@ const AttendanceLogs = () => {
   };
 
   // Filter logs based on search/filter criteria
+  // const getFilteredLogs = () => {
+  //   return logs.filter((log) => {
+  //     const matchesSearch =
+  //       !searchTerm ||
+  //       log.FullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //       log.EmployeeID?.toLowerCase().includes(searchTerm.toLowerCase());
+
+  //     const matchesDate = !selectedDate || log.Date === selectedDate;
+
+  //     const matchesPosition =
+  //       !selectedPosition || log.Position?.trim() === selectedPosition;
+
+  //     const matchesStatus =
+  //       !selectedStatus ||
+  //       log.Status?.toUpperCase() === selectedStatus.toUpperCase();
+
+  //     // For employee-specific mode, only filter by status and date if needed
+  //     if (employeeSpecificMode && currentEmployeeId) {
+  //       if (log.EmployeeID !== currentEmployeeId) return false;
+  //       return (
+  //         (!selectedDate || log.Date === selectedDate) &&
+  //         (!selectedStatus ||
+  //           log.Status?.toUpperCase() === selectedStatus.toUpperCase())
+  //       );
+  //     }
+
+  //     return matchesSearch && matchesDate && matchesPosition && matchesStatus;
+  //   });
+  // };
+
   const getFilteredLogs = () => {
     return logs.filter((log) => {
+      // For employee-specific mode, filter by employee ID first
+      if (employeeSpecificMode && currentEmployeeId) {
+        if (log.EmployeeID !== currentEmployeeId) return false;
+
+        // Then apply any additional date/status filters
+        const matchesDate = !selectedDate || log.Date === selectedDate;
+        const matchesStatus =
+          !selectedStatus ||
+          log.Status?.toUpperCase() === selectedStatus.toUpperCase();
+
+        return matchesDate && matchesStatus;
+      }
+
+      // Regular filtering for non-employee-specific mode
       const matchesSearch =
         !searchTerm ||
         log.FullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.EmployeeID?.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesDate = !selectedDate || log.Date === selectedDate;
-
       const matchesPosition =
         !selectedPosition || log.Position?.trim() === selectedPosition;
-
       const matchesStatus =
         !selectedStatus ||
         log.Status?.toUpperCase() === selectedStatus.toUpperCase();
 
-      // For employee-specific mode, only filter by status and date if needed
-      if (employeeSpecificMode && currentEmployeeId) {
-        if (log.EmployeeID !== currentEmployeeId) return false;
-        return (
-          (!selectedDate || log.Date === selectedDate) &&
-          (!selectedStatus ||
-            log.Status?.toUpperCase() === selectedStatus.toUpperCase())
-        );
-      }
-
       return matchesSearch && matchesDate && matchesPosition && matchesStatus;
     });
   };
+
   // Replace your existing useEffect for selectedDate with this:
   useEffect(() => {
     // Clear any previous debouncing
@@ -423,17 +420,6 @@ const AttendanceLogs = () => {
     // Call loadLogs directly when date changes (no debouncing)
     loadLogs();
   }, [loadLogs]); // Only selectedDate as dependency
-  // useEffect(() => {
-  //   // Only load logs when filters change (not when offset changes)
-  //   if (!logs.length) loadLogs();
-
-  //   // }, [selectedDate, selectedPosition, selectedStatus, selectedRange]); // Remove offset from dependencies
-  // }, [selectedDate, selectedRange]); // Remove offset from dependencies
-  // useEffect(() => {
-  //   if (selectedDate || selectedPosition || selectedStatus) {
-  //     debouncedLoadLogs();
-  //   }
-  // }, [selectedDate, selectedPosition, selectedStatus]);
 
   useEffect(() => {
     // Only run for today's date and when logs are loaded
@@ -517,7 +503,7 @@ const AttendanceLogs = () => {
         setSelectedRange={setSelectedRange}
         dateRanges={dateRanges}
         handleExport={handleExport}
-        isLoading={isLoading}
+        isExporting={isExporting}
       />
 
       {/* Search and filters */}
